@@ -22,9 +22,11 @@ export async function verifyLineIdToken(
   idToken: string,
   liffId: string
 ): Promise<LineVerifyResult> {
+  // client_id はチャンネルID（LIFF IDの "-" より前の数字部分）
+  const channelId = liffId.split("-")[0];
   const params = new URLSearchParams({
     id_token: idToken,
-    client_id: liffId,
+    client_id: channelId,
   });
 
   const res = await fetch("https://api.line.me/oauth2/v2.1/verify", {
