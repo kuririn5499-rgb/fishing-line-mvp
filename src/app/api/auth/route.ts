@@ -38,6 +38,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const { idToken, accountSlug } = parsed.data;
     const liffId = getLiffId(mode);
 
+    console.log("[api/auth] mode:", mode, "accountSlug:", accountSlug, "liffId:", liffId);
+
     if (!liffId) {
       return NextResponse.json(
         { error: "LIFF ID が設定されていません" },

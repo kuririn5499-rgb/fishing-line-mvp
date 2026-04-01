@@ -70,11 +70,14 @@ export async function loginWithLineToken(params: {
   const supabase = createServerSupabaseClient();
 
   // 2. account_id を slug から取得
+  console.log("[auth] searching account slug:", accountSlug);
   const { data: account, error: accountErr } = await supabase
     .from("accounts")
     .select("id")
     .eq("slug", accountSlug)
     .single();
+
+  console.log("[auth] account result:", account, "error:", accountErr?.message);
 
   if (accountErr || !account) {
     throw new Error(`アカウント "${accountSlug}" が見つかりません`);
