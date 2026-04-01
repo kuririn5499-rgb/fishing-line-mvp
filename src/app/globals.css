@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* LINE 内ブラウザでの安全領域対応 */
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* スクロールバーを細くする */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+/* カードのアクティブ状態 */
+.active\:scale-95:active {
+  transform: scale(0.95);
+}
+
+/* アニメーション（Toast 用） */
+@keyframes slideInFromBottom {
+  from {
+    transform: translateX(-50%) translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-in.slide-in-from-bottom-4 {
+  animation: slideInFromBottom 0.3s ease-out;
+}
