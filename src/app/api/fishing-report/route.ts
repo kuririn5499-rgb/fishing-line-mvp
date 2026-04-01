@@ -55,7 +55,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // message_logs に保存
     const messages = buildFishingReportMessage({
-      boatName: (trip.boats as { name: string } | null)?.name ?? "—",
+      boatName: (() => { const b = trip.boats as unknown as { name: string } | { name: string }[] | null; return (Array.isArray(b) ? b[0]?.name : b?.name) ?? "—"; })(),
       tripDate: trip.trip_date,
       catchSummary: catch_summary,
       hasVacancy: has_vacancy,

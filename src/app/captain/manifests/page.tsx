@@ -73,7 +73,7 @@ export default async function CaptainManifestsPage() {
               <section key={trip.id}>
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="text-sm font-bold text-gray-700">
-                    {trip.departure_time ?? "—"} {trip.boats?.name ?? ""}{" "}
+                    {trip.departure_time ?? "—"} {(Array.isArray(trip.boats) ? trip.boats[0]?.name : (trip.boats as {name:string}|null)?.name) ?? ""}{" "}
                     {trip.target_species ?? ""}
                   </h2>
                   <span className="text-xs text-gray-500">

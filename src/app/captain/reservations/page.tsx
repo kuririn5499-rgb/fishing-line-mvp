@@ -46,18 +46,14 @@ export default async function CaptainReservationsPage() {
       ) : (
         <div className="space-y-2">
           {reservations.map((r) => {
-            const trip = r.trips as {
-              trip_date: string;
-              departure_time: string | null;
-              target_species: string | null;
-              status: string;
-              boats?: { name: string } | null;
-            } | null;
+            type TripRow = { trip_date: string; departure_time: string | null; target_species: string | null; status: string; boats?: { name: string }[] | null };
+            const tripRaw = r.trips as unknown as TripRow | TripRow[] | null;
+            const trip = Array.isArray(tripRaw) ? tripRaw[0] ?? null : tripRaw;
+            const boatName = Array.isArray(trip?.boats) ? trip?.boats[0]?.name : null;
 
-            const customer = r.customers as {
-              full_name: string | null;
-              phone: string | null;
-            } | null;
+            type CustomerRow = { full_name: string | null; phone: string | null };
+            const customerRaw = r.customers as unknown as CustomerRow | CustomerRow[] | null;
+            const customer = Array.isArray(customerRaw) ? customerRaw[0] ?? null : customerRaw;
 
             return (
               <Card key={r.id}>
@@ -70,7 +66,7 @@ export default async function CaptainReservationsPage() {
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      {trip?.boats?.name ?? "—"} / {trip?.target_species ?? "—"} /
+                      {boatName ?? "—"} / {trip?.target_species ?? "—"} /
                       {r.passengers_count}名
                     </p>
                     <p className="text-xs text-gray-600 mt-1">

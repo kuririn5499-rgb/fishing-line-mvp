@@ -69,8 +69,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Google Sheets にミラー保存（失敗してもエラーを返さない）
     if (reservation) {
       try {
-        const tripDate =
-          (reservation.trips as { trip_date: string } | null)?.trip_date ?? "";
+        const tripsData = reservation.trips as unknown as { trip_date: string } | { trip_date: string }[] | null;
+        const tripDate = (Array.isArray(tripsData) ? tripsData[0]?.trip_date : tripsData?.trip_date) ?? "";
         const rowNumber = await appendManifestToSheet(
           manifest,
           reservation.reservation_code,

@@ -55,8 +55,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         .maybeSingle();
 
       if (trip) {
-        const boatName =
-          (trip.boats as { name: string } | null)?.name ?? "不明";
+        const boatsData = trip.boats as unknown as { name: string } | { name: string }[] | null;
+        const boatName = (Array.isArray(boatsData) ? boatsData[0]?.name : boatsData?.name) ?? "不明";
         const rowNumber = await appendDutyLogToSheet(
           log,
           trip.trip_date,
