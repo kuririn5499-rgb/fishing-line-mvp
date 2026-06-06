@@ -7,6 +7,7 @@ import { getSession } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { ManifestForm } from "@/components/forms/ManifestForm";
 import { Card } from "@/components/ui/Card";
+import { todayJST } from "@/lib/repositories/utils";
 import type { Reservation, BoardingManifest } from "@/types";
 
 export default async function CustomerManifestPage() {
@@ -35,14 +36,20 @@ export default async function CustomerManifestPage() {
     );
   }
 
-  // 名簿未提出の予約一覧
-  const { data: reservations } = await supabase
+  // 名簿提出できる予約：今日以降の便・キャンセルされていないもの
+  const today = todayJST();
+  const { data: rawReservations } = await supabase
     .from("reservations")
     .select("id, reservation_code, trips(trip_date, departure_time, target_species)")
     .eq("customer_id", customer.id)
     .in("status", ["pending", "confirmed"])
     .order("created_at", { ascending: false })
-    .limit(10);
+    .limit(30);
+
+  const reservations = (rawReservations ?? []).filter((r) => {
+    const trip = Array.isArray(r.trips) ? r.trips[0] : r.trips;
+    return trip?.trip_date && trip.trip_date >= today;
+  });
 
   // 前回の名簿データ（初期値として使う）
   const { data: lastManifest } = await supabase

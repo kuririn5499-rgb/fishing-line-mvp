@@ -1,12 +1,16 @@
 /**
  * PATCH /api/trips/:id/status
  * 便のステータスを更新する（captain / admin のみ）
+ * - → cancelled: 全予約を一括キャンセル + カレンダーイベントを削除
+ * - cancelled/completed → open: カレンダーイベントを再作成
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { TripStatusUpdateSchema } from "@/lib/schemas";
-import { updateTripStatus } from "@/lib/repositories/trips";
+import { updateTripStatus, getTripById, setTripGcalEventId } from "@/lib/repositories/trips";
+import { createTripEvent, deleteTripEvent } from "@/lib/google-calendar";
+import { createServerSupabaseClient } from "@/lib/supabase";
 
 export async function PATCH(
   req: NextRequest,
@@ -26,8 +30,71 @@ export async function PATCH(
       );
     }
 
-    await updateTripStatus(id, session.accountId, parsed.data.status);
-    return NextResponse.json({ ok: true });
+    const newStatus = parsed.data.status;
+    const trip = await getTripById(id, session.accountId);
+    if (!trip) {
+      return NextResponse.json({ error: "便が見つかりません" }, { status: 404 });
+    }
+
+    await updateTripStatus(id, session.accountId, newStatus);
+
+    const supabase = createServerSupabaseClient();
+    let calWarning: string | undefined;
+
+    if (newStatus === "cancelled") {
+      // 紐づく全予約をキャンセルに一括更新
+      await supabase
+        .from("reservations")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .eq("trip_id", id)
+        .eq("account_id", session.accountId)
+        .in("status", ["pending", "confirmed", "waitlist"]);
+
+      // カレンダーイベント削除
+      if (trip.gcal_event_id) {
+        try {
+          await deleteTripEvent(trip.gcal_event_id);
+        } catch (delErr) {
+          // 既に削除済み(404)などの場合も警告だけ返す
+          calWarning = delErr instanceof Error ? delErr.message : "カレンダー削除失敗";
+          console.error("[trips/status] カレンダー削除失敗:", delErr);
+        }
+        // 成否に関わらず gcal_event_id をクリア（再試行ループを防ぐ）
+        await setTripGcalEventId(id, "").catch((e) =>
+          console.error("[trips/status] gcal_event_id クリア失敗:", e)
+        );
+      }
+    } else if (
+      (trip.status === "cancelled" || trip.status === "completed") &&
+      newStatus === "open" &&
+      trip.departure_time &&
+      trip.return_time
+    ) {
+      // キャンセル/完了 → 受付中に復帰: イベント再作成
+      try {
+        const { count: reservedCount } = await supabase
+          .from("reservations")
+          .select("id", { count: "exact", head: true })
+          .eq("trip_id", id)
+          .neq("status", "cancelled");
+
+        const gcalEventId = await createTripEvent({
+          tripId: trip.id,
+          tripDate: trip.trip_date,
+          departureTime: trip.departure_time.slice(0, 5),
+          returnTime: trip.return_time.slice(0, 5),
+          targetSpecies: trip.target_species ?? undefined,
+          capacity: trip.capacity ?? undefined,
+          reservedCount: reservedCount ?? 0,
+        });
+        await setTripGcalEventId(id, gcalEventId);
+      } catch (calErr) {
+        calWarning = calErr instanceof Error ? calErr.message : "カレンダー再作成失敗";
+        console.error("[trips/status] カレンダー再作成失敗:", calErr);
+      }
+    }
+
+    return NextResponse.json({ ok: true, ...(calWarning ? { cal_warning: calWarning } : {}) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "エラー";
     const status = msg === "UNAUTHORIZED" ? 401 : msg === "FORBIDDEN" ? 403 : 500;

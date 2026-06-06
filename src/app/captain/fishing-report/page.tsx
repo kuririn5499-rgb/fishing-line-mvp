@@ -16,13 +16,18 @@ export default async function FishingReportPage() {
   const supabase = createServerSupabaseClient();
   const today = todayJST();
 
-  // 本日の完了 or confirmed 便
+  // 本日以降のキャンセル以外の便
+  const until = new Date();
+  until.setDate(until.getDate() + 30);
   const { data: trips } = await supabase
     .from("trips")
     .select("id, trip_date, departure_time, target_species, boats(name)")
     .eq("account_id", session.accountId)
-    .eq("trip_date", today)
-    .in("status", ["confirmed", "completed"]);
+    .gte("trip_date", today)
+    .lte("trip_date", until.toISOString().slice(0, 10))
+    .neq("status", "cancelled")
+    .order("trip_date", { ascending: true })
+    .order("departure_time", { ascending: true });
 
   // account の LINE チャンネルアクセストークン
   const { data: account } = await supabase

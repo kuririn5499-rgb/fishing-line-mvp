@@ -19,6 +19,12 @@ export function LiffGate({ liffId, accountSlug, mode, redirectTo }: LiffGateProp
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // 開発環境では dev-login ページへリダイレクト
+    if (process.env.NEXT_PUBLIC_DEV_BYPASS === "true") {
+      window.location.href = `/dev-login?redirect=${encodeURIComponent(redirectTo)}`;
+      return;
+    }
+
     async function init() {
       try {
         const liff = (await import("@line/liff")).default;

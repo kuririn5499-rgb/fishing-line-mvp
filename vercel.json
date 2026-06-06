@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/award-points",
+      "schedule": "0 15 * * *"
+    }
+  ]
+}

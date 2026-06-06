@@ -1,10 +1,12 @@
 /**
  * /customer/coupons — クーポン一覧
+ * タップすると出船情報へ遷移し、クーポン割引が自動適用される
  */
 
 import { getSession } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
+import { CouponClaimCard } from "@/components/ui/CouponClaimCard";
 
 export default async function CustomerCouponsPage() {
   const session = await getSession();
@@ -14,7 +16,7 @@ export default async function CustomerCouponsPage() {
 
   const { data } = await supabase
     .from("user_coupons")
-    .select("*, coupons(*)")
+    .select("id, coupon_id, status, issued_at, used_at, coupons(title, discount_type, discount_value, date_restriction, valid_to)")
     .eq("user_id", session.userId)
     .order("issued_at", { ascending: false });
 
@@ -23,6 +25,9 @@ export default async function CustomerCouponsPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-bold text-gray-800">クーポン</h1>
+      <p className="text-xs text-gray-400">
+        タップすると出船情報でクーポン割引が自動的に適用されます
+      </p>
 
       {coupons.length === 0 ? (
         <Card>
@@ -33,76 +38,25 @@ export default async function CustomerCouponsPage() {
       ) : (
         <div className="space-y-3">
           {coupons.map((uc) => {
-            const coupon = uc.coupons as {
+            const coupon = uc.coupons as unknown as {
               title: string;
-              description: string | null;
               discount_type: string | null;
               discount_value: number | null;
+              date_restriction: string;
               valid_to: string | null;
             } | null;
             if (!coupon) return null;
 
-            const isUsed = uc.status === "used";
-            const isExpired = uc.status === "expired";
-            const expired =
-              coupon.valid_to && new Date(coupon.valid_to) < new Date();
-
             return (
-              <div
+              <CouponClaimCard
                 key={uc.id}
-                className={`
-                  relative bg-white rounded-2xl border shadow-sm overflow-hidden
-                  ${isUsed || isExpired || expired ? "opacity-50" : "border-brand-200"}
-                `}
-              >
-                {/* 左側のアクセントライン */}
-                <div
-                  className={`absolute left-0 top-0 bottom-0 w-1.5 ${
-                    isUsed || isExpired || expired
-                      ? "bg-gray-300"
-                      : "bg-brand-500"
-                  }`}
-                />
-                <div className="pl-5 pr-4 py-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-bold text-sm text-gray-800">
-                        {coupon.title}
-                      </p>
-                      {coupon.description && (
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {coupon.description}
-                        </p>
-                      )}
-                      {coupon.discount_value != null && (
-                        <p className="text-brand-600 font-bold text-lg mt-1">
-                          {coupon.discount_type === "amount"
-                            ? `¥${coupon.discount_value.toLocaleString()} OFF`
-                            : coupon.discount_type === "percent"
-                            ? `${coupon.discount_value}% OFF`
-                            : coupon.discount_value}
-                        </p>
-                      )}
-                      {coupon.valid_to && (
-                        <p className="text-xs text-gray-400 mt-1">
-                          有効期限: {new Date(coupon.valid_to).toLocaleDateString("ja-JP")}
-                        </p>
-                      )}
-                    </div>
-                    <span
-                      className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        isUsed
-                          ? "bg-gray-100 text-gray-500"
-                          : isExpired || expired
-                          ? "bg-red-50 text-red-400"
-                          : "bg-green-100 text-green-700"
-                      }`}
-                    >
-                      {isUsed ? "使用済" : isExpired || expired ? "期限切れ" : "有効"}
-                    </span>
-                  </div>
-                </div>
-              </div>
+                userCouponId={uc.id}
+                title={coupon.title}
+                discountValue={coupon.discount_value}
+                dateRestriction={coupon.date_restriction}
+                validTo={coupon.valid_to}
+                status={uc.status}
+              />
             );
           })}
         </div>

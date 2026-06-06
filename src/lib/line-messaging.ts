@@ -67,30 +67,32 @@ export function buildDepartureNoticeMessage(params: {
   return [{ type: "text", text }];
 }
 
-/** 釣果通知メッセージを生成する */
+/** 釣果通知メッセージを生成する（テキスト1件 + 画像最大2枚） */
 export function buildFishingReportMessage(params: {
   boatName: string;
   tripDate: string;
   catchSummary: string;
   hasVacancy: boolean;
-  imageUrl?: string;
+  imageUrls?: string[];  // 最大2枚
 }): LineMessage[] {
-  const { boatName, tripDate, catchSummary, hasVacancy, imageUrl } = params;
+  const { boatName, tripDate, catchSummary, hasVacancy, imageUrls } = params;
   const messages: LineMessage[] = [];
 
-  if (imageUrl) {
-    messages.push({
-      type: "image",
-      originalContentUrl: imageUrl,
-      previewImageUrl: imageUrl,
-    });
-  }
-
+  // テキストを先頭に
   const vacancyText = hasVacancy ? "\n\n🎣 空席あり！ぜひご予約ください" : "";
   messages.push({
     type: "text",
     text: `🐟 ${boatName} 釣果情報 (${tripDate})\n\n${catchSummary}${vacancyText}`,
   });
+
+  // 画像は最大2枚まで（LINE の1回送信上限を考慮）
+  for (const url of (imageUrls ?? []).slice(0, 2)) {
+    messages.push({
+      type: "image",
+      originalContentUrl: url,
+      previewImageUrl: url,
+    });
+  }
 
   return messages;
 }

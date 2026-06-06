@@ -107,9 +107,14 @@ export function TripCreateForm({ boats }: TripCreateFormProps) {
           />
         </FormField>
 
-        <FormField label="定員" error={errors.capacity}>
-          <Input type="number" min={1} max={100} {...register("capacity")} />
-        </FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="定員" error={errors.capacity}>
+            <Input type="number" min={1} max={100} {...register("capacity")} placeholder="10" />
+          </FormField>
+          <FormField label="料金（円/名）" error={errors.price_per_person}>
+            <Input type="number" min={0} {...register("price_per_person")} placeholder="15000" />
+          </FormField>
+        </div>
 
         <FormField label="天気メモ" error={errors.weather_note}>
           <Input {...register("weather_note")} placeholder="晴れ、波1m など" />

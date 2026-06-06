@@ -9,6 +9,7 @@ import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { TripStatusBadge } from "@/components/ui/StatusBadge";
 import { todayJST } from "@/lib/repositories/utils";
+import { ManualReservationForm } from "@/components/forms/ManualReservationForm";
 
 export default async function CaptainDashboardPage() {
   const session = await getSession();
@@ -27,8 +28,36 @@ export default async function CaptainDashboardPage() {
 
   const trips = todayTrips ?? [];
 
-  // アラート集計
-  const noPreCheck = trips.filter(
+  // 手動予約フォーム用：直近〜30日先の便
+  const until = new Date();
+  until.setDate(until.getDate() + 30);
+  const { data: upcomingTrips } = await supabase
+    .from("trips")
+    .select("id, trip_date, departure_time, target_species, boats(name)")
+    .eq("account_id", session.accountId)
+    .gte("trip_date", today)
+    .lte("trip_date", until.toISOString().slice(0, 10))
+    .not("status", "in", '("cancelled","completed")')
+    .order("trip_date", { ascending: true })
+    .order("departure_time", { ascending: true });
+
+  const tripOptions = (upcomingTrips ?? []).map((t) => {
+    const boats = t.boats as unknown as { name: string } | { name: string }[] | null;
+    const boatName = Array.isArray(boats) ? boats[0]?.name ?? null : boats?.name ?? null;
+    return {
+      id: t.id,
+      trip_date: t.trip_date,
+      departure_time: t.departure_time,
+      target_species: t.target_species,
+      boat_name: boatName,
+    };
+  });
+
+  // アラート集計（中止・完了便は除外）
+  const activeTrips = trips.filter(
+    (t) => t.status !== "cancelled"
+  );
+  const noPreCheck = activeTrips.filter(
     (t) => !((t.pre_departure_checks as unknown[])?.length > 0)
   );
   const noDutyLog = trips.filter(
@@ -194,7 +223,22 @@ export default async function CaptainDashboardPage() {
             <span className="text-sm font-medium">釣果投稿</span>
           </Card>
         </Link>
+        <Link href="/captain/coupons">
+          <Card className="flex items-center gap-3 hover:shadow-md transition-shadow">
+            <span className="text-2xl">🎟️</span>
+            <span className="text-sm font-medium">クーポン管理</span>
+          </Card>
+        </Link>
+        <Link href="/captain/points">
+          <Card className="flex items-center gap-3 hover:shadow-md transition-shadow">
+            <span className="text-2xl">⭐</span>
+            <span className="text-sm font-medium">ポイント管理</span>
+          </Card>
+        </Link>
       </div>
+
+      {/* 手動予約入力 */}
+      <ManualReservationForm trips={tripOptions} />
     </div>
   );
 }

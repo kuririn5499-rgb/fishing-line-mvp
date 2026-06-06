@@ -52,6 +52,7 @@ export async function upsertManifest(
     customer_id: customerId,
     submitted_by_user_id: submittedByUserId,
     full_name: input.full_name,
+    age: input.age ?? null,
     phone: input.phone,
     address: input.address,
     emergency_name: input.emergency_name,

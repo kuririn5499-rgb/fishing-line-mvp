@@ -65,8 +65,10 @@ export async function createTrip(
       account_id: accountId,
       created_by: createdBy,
       ...input,
+      status: "open",
       departure_time: input.departure_time || null,
       return_time: input.return_time || null,
+      price_per_person: input.price_per_person ?? null,
     })
     .select()
     .single();
@@ -88,4 +90,40 @@ export async function updateTripStatus(
     .eq("account_id", accountId);
 
   if (error) throw new Error(`trip ステータス更新エラー: ${error.message}`);
+}
+
+export async function updateTrip(
+  tripId: string,
+  accountId: string,
+  input: Partial<TripCreate>
+): Promise<Trip> {
+  const supabase = createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("trips")
+    .update({
+      ...input,
+      departure_time: input.departure_time || null,
+      return_time: input.return_time || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", tripId)
+    .eq("account_id", accountId)
+    .select()
+    .single();
+
+  if (error || !data) throw new Error(`trip 更新エラー: ${error?.message}`);
+  return data;
+}
+
+export async function setTripGcalEventId(
+  tripId: string,
+  gcalEventId: string
+): Promise<void> {
+  const supabase = createServerSupabaseClient();
+  const { error } = await supabase
+    .from("trips")
+    .update({ gcal_event_id: gcalEventId, updated_at: new Date().toISOString() })
+    .eq("id", tripId);
+
+  if (error) throw new Error(`gcal_event_id 保存エラー: ${error.message}`);
 }

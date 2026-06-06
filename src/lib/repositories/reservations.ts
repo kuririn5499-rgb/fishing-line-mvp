@@ -42,7 +42,7 @@ export async function getReservationsByCustomer(
 export async function createReservation(
   accountId: string,
   customerId: string,
-  input: ReservationCreate
+  input: ReservationCreate & { coupon_id?: string; discount_amount?: number }
 ): Promise<Reservation> {
   const supabase = createServerSupabaseClient();
 
@@ -68,6 +68,8 @@ export async function createReservation(
       passengers_count: input.passengers_count,
       memo: input.memo ?? null,
       status: "pending",
+      coupon_id: input.coupon_id ?? null,
+      discount_amount: input.discount_amount ?? null,
     })
     .select()
     .single();

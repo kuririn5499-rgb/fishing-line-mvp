@@ -14,6 +14,7 @@ interface AppShellProps {
   children: ReactNode;
   title?: string;
   role: Role;
+  navType?: "captain" | "customer" | "admin";
   displayName?: string | null;
   pictureUrl?: string | null;
 }
@@ -54,11 +55,16 @@ export function AppShell({
   children,
   title,
   role,
+  navType,
   displayName,
   pictureUrl,
 }: AppShellProps) {
   const pathname = usePathname();
-  const nav = getNav(role);
+  const nav = navType
+    ? navType === "captain" ? captainNav
+    : navType === "customer" ? customerNav
+    : adminNav
+    : getNav(role);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">

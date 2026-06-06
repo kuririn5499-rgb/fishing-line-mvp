@@ -28,6 +28,8 @@ export type ReservationStatus =
 export type DepartureJudgement = "go" | "cancel" | "hold";
 
 export type DiscountType = "amount" | "percent" | "benefit";
+export type DateRestriction = "none" | "weekdays" | "weekends" | "specific";
+export type CouponSegment = "all" | "once" | "five_plus" | "ten_plus";
 
 export type CouponStatus = "issued" | "used" | "expired";
 
@@ -116,7 +118,9 @@ export interface Trip {
   target_species: string | null;
   capacity: number | null;
   status: TripStatus;
+  price_per_person: number | null;
   weather_note: string | null;
+  gcal_event_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -130,6 +134,8 @@ export interface Reservation {
   reservation_code: string;
   status: ReservationStatus;
   passengers_count: number;
+  coupon_id: string | null;
+  discount_amount: number | null;
   memo: string | null;
   created_at: string;
   updated_at: string;
@@ -142,6 +148,7 @@ export interface BoardingManifest {
   customer_id: string | null;
   submitted_by_user_id: string | null;
   full_name: string | null;
+  age: number | null;
   phone: string | null;
   address: string | null;
   emergency_name: string | null;
@@ -159,11 +166,11 @@ export interface BoardingManifest {
 /** 同行者エントリ（companions_json の要素） */
 export interface CompanionEntry {
   full_name: string;
+  age?: number;
   phone?: string;
-  emergency_name?: string;
+  address?: string;
   emergency_phone?: string;
-  life_jacket_owned?: boolean;
-  rental_required?: boolean;
+  notes?: string;
 }
 
 export interface PreDepartureCheck {
@@ -177,17 +184,35 @@ export interface PreDepartureCheck {
   wind: string | null;
   wave: string | null;
   visibility: string | null;
-  fuel_checked: boolean;
-  battery_checked: boolean;
-  engine_checked: boolean;
+  // 安全確認チェック項目
+  hull_checked: boolean;
   bilge_checked: boolean;
-  radio_checked: boolean;
+  fuel_checked: boolean;
+  fuel_valve_checked: boolean;
+  engine_oil_checked: boolean;
+  coolant_checked: boolean;
+  battery_checked: boolean;
   life_saving_equipment_checked: boolean;
-  crew_condition_checked: boolean;
+  radio_checked: boolean;
+  equipment_compliance_checked: boolean;
+  rescue_ladder_checked: boolean;
+  landing_steps_checked: boolean;
+  fishing_gear_checked: boolean;
+  gauges_checked: boolean;
+  cooling_water_checked: boolean;
+  engine_checked: boolean;
+  // アルコール・健康確認
   alcohol_checked: boolean;
+  crew_condition_checked: boolean;
+  // テキスト項目
+  issue_notes: string | null;
+  inspector_name: string | null;
+  inspection_location: string | null;
+  alcohol_test_value: string | null;
+  notes: string | null;
+  // 出船判断（別ボタンから更新）
   departure_judgement: DepartureJudgement | null;
   cancel_reason: string | null;
-  notes: string | null;
   checked_at: string | null;
   sheet_row_number: number | null;
   created_at: string;
@@ -203,13 +228,18 @@ export interface DutyLog {
   chief_user_id: string | null;
   departure_at: string | null;
   return_at: string | null;
+  departure_location: string | null;
+  arrival_location: string | null;
+  captain_name: string | null;
   passenger_count: number | null;
   fishing_area: string | null;
   weather: string | null;
   sea_condition: string | null;
-  safety_guidance: string | null;
-  incident_report: string | null;
   catch_summary: string | null;
+  incident_report: string | null;
+  emergency_contact_log: string | null;
+  operator_opinion: string | null;
+  safety_guidance: string | null;
   notes: string | null;
   recorded_at: string | null;
   sheet_row_number: number | null;
@@ -224,6 +254,9 @@ export interface Coupon {
   description: string | null;
   discount_type: DiscountType | null;
   discount_value: number | null;
+  date_restriction: DateRestriction;
+  specific_dates: string | null;  // JSON配列
+  segment: CouponSegment;
   valid_from: string | null;
   valid_to: string | null;
   is_active: boolean;
@@ -237,6 +270,32 @@ export interface UserCoupon {
   status: CouponStatus;
   issued_at: string;
   used_at: string | null;
+}
+
+export interface PointReward {
+  id: string;
+  account_id: string;
+  title: string;
+  description: string | null;
+  points_required: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type RedemptionStatus = "pending" | "approved" | "rejected";
+
+export interface PointRedemption {
+  id: string;
+  account_id: string;
+  user_id: string;
+  customer_id: string | null;
+  reward_id: string;
+  points_used: number;
+  status: RedemptionStatus;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PointLog {

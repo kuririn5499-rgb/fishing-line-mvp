@@ -16,6 +16,7 @@ const Schema = z.object({
   trip_id: z.string().uuid(),
   catch_summary: z.string().min(1).max(500),
   has_vacancy: z.boolean(),
+  image_urls: z.array(z.string().url()).max(2).optional(),
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { trip_id, catch_summary, has_vacancy } = parsed.data;
+    const { trip_id, catch_summary, has_vacancy, image_urls } = parsed.data;
 
     const supabase = createServerSupabaseClient();
 
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       tripDate: trip.trip_date,
       catchSummary: catch_summary,
       hasVacancy: has_vacancy,
+      imageUrls: image_urls,
     });
 
     await supabase.from("message_logs").insert({

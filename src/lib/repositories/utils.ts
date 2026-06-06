@@ -8,6 +8,12 @@ export function nanoid(length = 8): string {
   return result;
 }
 
+/** 金額を ¥X,XXX 形式で返す */
+export function formatPrice(price: number | null | undefined): string {
+  if (price == null) return "";
+  return `¥${price.toLocaleString("ja-JP")}`;
+}
+
 /** 日本時間の今日の日付を YYYY-MM-DD 形式で返す */
 export function todayJST(): string {
   return new Date()

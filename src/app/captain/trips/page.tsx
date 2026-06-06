@@ -8,7 +8,10 @@ import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
 import { TripStatusBadge } from "@/components/ui/StatusBadge";
 import { TripCreateForm } from "@/components/forms/TripCreateForm";
+import { TripEditForm } from "@/components/forms/TripEditForm";
 import { TripStatusUpdater } from "@/components/forms/TripStatusUpdater";
+import { DepartureNoticeButton } from "@/components/forms/DepartureNoticeButton";
+import { todayJST, formatPrice } from "@/lib/repositories/utils";
 import type { Trip } from "@/types";
 
 export default async function CaptainTripsPage() {
@@ -17,17 +20,15 @@ export default async function CaptainTripsPage() {
 
   const supabase = createServerSupabaseClient();
 
-  // 直近30日 + 未来の便
-  const since = new Date();
-  since.setDate(since.getDate() - 7);
-  const sinceStr = since.toISOString().slice(0, 10);
+  // 本日以降の便のみ表示
+  const today = todayJST();
 
   const { data: trips } = await supabase
     .from("trips")
     .select("*, boats(name)")
     .eq("account_id", session.accountId)
-    .gte("trip_date", sinceStr)
-    .order("trip_date", { ascending: false })
+    .gte("trip_date", today)
+    .order("trip_date", { ascending: true })
     .order("departure_time", { ascending: true })
     .limit(50);
 
@@ -65,18 +66,35 @@ export default async function CaptainTripsPage() {
                       </span>
                       {trip.departure_time && (
                         <span className="text-xs text-gray-500">
-                          {trip.departure_time}〜{trip.return_time ?? ""}
+                          {trip.departure_time.slice(0, 5)}〜{trip.return_time?.slice(0, 5) ?? ""}
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
                       {trip.boats?.name ?? "—"} / {trip.target_species ?? "—"} /
                       定員 {trip.capacity ?? "—"}名
+                      {trip.price_per_person != null && (
+                        <span className="text-gray-700 font-medium ml-1">
+                          / {formatPrice(trip.price_per_person)}/名
+                        </span>
+                      )}
                     </p>
+                    {trip.weather_note && (
+                      <p className="text-xs text-gray-400 mt-0.5">{trip.weather_note}</p>
+                    )}
+                    {/* インライン編集フォーム */}
+                    <TripEditForm trip={trip} boats={boats ?? []} />
                   </div>
                 </div>
-                {/* ステータス変更 */}
-                <TripStatusUpdater tripId={trip.id} currentStatus={trip.status} />
+                {/* ステータス変更・出船判断 */}
+                <TripStatusUpdater tripId={trip.id} currentStatus={trip.status}>
+                  <DepartureNoticeButton
+                    tripId={trip.id}
+                    tripDate={trip.trip_date}
+                    departureTime={trip.departure_time}
+                    targetSpecies={trip.target_species}
+                  />
+                </TripStatusUpdater>
               </Card>
             ))}
           </div>

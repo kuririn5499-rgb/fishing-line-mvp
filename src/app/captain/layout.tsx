@@ -37,6 +37,7 @@ export default async function CaptainLayout({
   return (
     <AppShell
       role={session.role}
+      navType="captain"
       displayName={session.displayName}
       pictureUrl={session.pictureUrl}
       title="船長ダッシュボード"

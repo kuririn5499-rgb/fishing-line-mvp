@@ -12,6 +12,8 @@ import {
   createReservation,
 } from "@/lib/repositories/reservations";
 import { createServerSupabaseClient } from "@/lib/supabase";
+import { appendReservationToSheet } from "@/lib/google-sheets";
+import { syncTripCalendarCounts } from "@/lib/calendar-sync";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
@@ -72,11 +74,89 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "顧客情報が見つかりません" }, { status: 404 });
     }
 
-    const reservation = await createReservation(
-      session.accountId,
-      customer.id,
-      parsed.data
-    );
+    // 入力された本名で顧客レコードを更新
+    if (parsed.data.customer_name) {
+      await supabase
+        .from("customers")
+        .update({ full_name: parsed.data.customer_name, updated_at: new Date().toISOString() })
+        .eq("id", customer.id);
+    }
+
+    // クーポン検証・割引額計算
+    let couponId: string | undefined;
+    let discountAmount: number | undefined;
+
+    if (parsed.data.coupon_id) {
+      const { data: userCoupon } = await supabase
+        .from("user_coupons")
+        .select("id, status, coupons(discount_type, discount_value)")
+        .eq("id", parsed.data.coupon_id)
+        .eq("user_id", session.userId)
+        .eq("status", "issued")
+        .maybeSingle();
+
+      if (userCoupon) {
+        const couponData = userCoupon.coupons as unknown as {
+          discount_type: string | null;
+          discount_value: number | null;
+        } | null;
+
+        if (couponData?.discount_type === "amount" && couponData.discount_value) {
+          couponId = parsed.data.coupon_id;
+          discountAmount = couponData.discount_value * parsed.data.passengers_count;
+        }
+      }
+    }
+
+    const reservation = await createReservation(session.accountId, customer.id, {
+      ...parsed.data,
+      coupon_id: couponId,
+      discount_amount: discountAmount,
+    });
+
+    // クーポンを使用済みにする
+    if (couponId) {
+      await supabase
+        .from("user_coupons")
+        .update({ status: "used", used_at: new Date().toISOString() })
+        .eq("id", couponId);
+    }
+
+    // Google Sheets & カレンダーに予約を同期
+    try {
+      const supabase = createServerSupabaseClient();
+      const { data: trip } = await supabase
+        .from("trips")
+        .select("trip_date, departure_time, return_time, target_species, capacity, gcal_event_id")
+        .eq("id", parsed.data.trip_id)
+        .maybeSingle();
+
+      const { data: cust } = await supabase
+        .from("customers")
+        .select("full_name")
+        .eq("id", customer.id)
+        .maybeSingle();
+
+      if (trip) {
+        // Sheets 同期
+        await appendReservationToSheet(
+          trip.trip_date,
+          reservation.reservation_code,
+          parsed.data.trip_id,
+          cust?.full_name ?? session.displayName ?? "",
+          parsed.data.passengers_count,
+          reservation.status,
+          parsed.data.memo ?? null,
+          reservation.created_at
+        );
+
+        // カレンダー更新（gcal_event_id がなければ新規作成も行う）
+        await syncTripCalendarCounts(parsed.data.trip_id, supabase, session.accountId);
+      }
+    } catch (syncErr) {
+      console.error("[reservations] 同期エラー:", syncErr);
+    }
+
     return NextResponse.json({ reservation }, { status: 201 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "エラー";

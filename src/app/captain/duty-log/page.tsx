@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { DutyLogForm } from "@/components/forms/DutyLogForm";
 import { Card } from "@/components/ui/Card";
+import { todayJST } from "@/lib/repositories/utils";
 import type { Trip, Boat, DutyLog } from "@/types";
 
 interface PageProps {
@@ -19,20 +20,21 @@ export default async function DutyLogPage({ searchParams }: PageProps) {
   const { trip_id } = await searchParams;
   const supabase = createServerSupabaseClient();
 
-  // 直近7日分の便（完了 or confirmed）
+  // 過去30日〜本日のキャンセル以外の便（乗務記録は出船後に記入するため過去日も含む）
+  const today = todayJST();
   const since = new Date();
-  since.setDate(since.getDate() - 7);
-  const sinceStr = since.toISOString().slice(0, 10);
+  since.setDate(since.getDate() - 30);
 
   const { data: trips } = await supabase
     .from("trips")
     .select("*, boats(id, name)")
     .eq("account_id", session.accountId)
-    .gte("trip_date", sinceStr)
-    .in("status", ["confirmed", "completed"])
+    .gte("trip_date", since.toISOString().slice(0, 10))
+    .lte("trip_date", today)
+    .neq("status", "cancelled")
     .order("trip_date", { ascending: false })
     .order("departure_time", { ascending: true })
-    .limit(20);
+    .limit(30);
 
   const selectedTrip = trips?.find((t) => t.id === trip_id) ?? trips?.[0] ?? null;
 

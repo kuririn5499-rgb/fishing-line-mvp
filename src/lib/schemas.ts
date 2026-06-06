@@ -43,6 +43,7 @@ export const TripCreateSchema = z.object({
   trip_type: z.string().max(100).optional(),
   target_species: z.string().max(200).optional(),
   capacity: z.coerce.number().int().min(1).max(100).optional(),
+  price_per_person: z.coerce.number().int().min(0).max(1000000).optional(),
   weather_note: z.string().max(500).optional(),
 });
 export type TripCreate = z.infer<typeof TripCreateSchema>;
@@ -59,34 +60,52 @@ export type TripStatusUpdate = z.infer<typeof TripStatusUpdateSchema>;
 
 export const ReservationCreateSchema = z.object({
   trip_id: z.string().uuid("便 ID は必須です"),
+  customer_name: z.string().min(1, "お名前は必須です").max(100),
   passengers_count: z.coerce.number().int().min(1, "乗船人数は1名以上です").max(20),
+  coupon_id: z.string().uuid().optional(),
   memo: z.string().max(500).optional(),
 });
 export type ReservationCreate = z.infer<typeof ReservationCreateSchema>;
+
+/** 船長が電話受付などで手動入力する予約スキーマ */
+export const CaptainReservationCreateSchema = z.object({
+  trip_id: z.string().uuid("便を選択してください"),
+  customer_name: z.string().min(1, "氏名は必須です").max(100),
+  customer_phone: z
+    .string()
+    .regex(phoneRegex, "電話番号の形式が正しくありません")
+    .optional()
+    .or(z.literal("")),
+  passengers_count: z.coerce.number().int().min(1, "乗船人数は1名以上です").max(20),
+  memo: z.string().max(500).optional(),
+  status: z.enum(["pending", "confirmed"]).default("confirmed"),
+});
+export type CaptainReservationCreate = z.infer<typeof CaptainReservationCreateSchema>;
 
 // =====================
 // 乗船名簿（BoardingManifest）
 // =====================
 
 const CompanionSchema = z.object({
-  full_name: z.string().min(1, "同行者名は必須です").max(100),
+  full_name: z.string().min(1, "氏名は必須です").max(100),
+  age: z.coerce.number().int().min(0).max(150).optional(),
   phone: z.string().regex(phoneRegex, "電話番号の形式が正しくありません").optional().or(z.literal("")),
-  emergency_name: z.string().max(100).optional(),
-  emergency_phone: z.string().regex(phoneRegex, "電話番号の形式が正しくありません").optional().or(z.literal("")),
-  life_jacket_owned: z.boolean().optional(),
-  rental_required: z.boolean().optional(),
+  address: z.string().max(300).optional().or(z.literal("")),
+  emergency_phone: z.string().regex(phoneRegex, "緊急連絡先の形式が正しくありません").optional().or(z.literal("")),
+  notes: z.string().max(500).optional().or(z.literal("")),
 });
 
 export const ManifestSubmitSchema = z.object({
   reservation_id: z.string().uuid("予約 ID は必須です"),
   full_name: z.string().min(1, "氏名は必須です").max(100),
+  age: z.coerce.number().int().min(0).max(150).optional(),
   phone: z.string().regex(phoneRegex, "電話番号の形式が正しくありません"),
   address: z.string().min(1, "住所は必須です").max(300),
-  emergency_name: z.string().min(1, "緊急連絡先氏名は必須です").max(100),
+  emergency_name: z.string().max(100).optional().or(z.literal("")),
   emergency_phone: z.string().regex(phoneRegex, "緊急連絡先電話番号の形式が正しくありません"),
-  life_jacket_owned: z.boolean(),
-  rental_required: z.boolean(),
-  companions: z.array(CompanionSchema).max(19, "同行者は最大19名です"),
+  life_jacket_owned: z.boolean().optional().default(false),
+  rental_required: z.boolean().optional().default(false),
+  companions: z.array(CompanionSchema).max(19).optional().default([]),
   notes: z.string().max(500).optional(),
 });
 export type ManifestSubmit = z.infer<typeof ManifestSubmitSchema>;
@@ -98,23 +117,41 @@ export type ManifestSubmit = z.infer<typeof ManifestSubmitSchema>;
 export const PreDepartureCheckSchema = z.object({
   trip_id: z.string().uuid("便 ID は必須です"),
   boat_id: z.string().uuid().optional(),
-  weather: z.string().max(100).optional(),
-  wind: z.string().max(100).optional(),
-  wave: z.string().max(100).optional(),
-  visibility: z.string().max(100).optional(),
-  fuel_checked: z.boolean(),
-  battery_checked: z.boolean(),
-  engine_checked: z.boolean(),
+  // 安全確認チェック項目
+  hull_checked: z.boolean(),
   bilge_checked: z.boolean(),
-  radio_checked: z.boolean(),
+  fuel_checked: z.boolean(),
+  fuel_valve_checked: z.boolean(),
+  engine_oil_checked: z.boolean(),
+  coolant_checked: z.boolean(),
+  battery_checked: z.boolean(),
   life_saving_equipment_checked: z.boolean(),
-  crew_condition_checked: z.boolean(),
+  radio_checked: z.boolean(),
+  equipment_compliance_checked: z.boolean(),
+  rescue_ladder_checked: z.boolean(),
+  landing_steps_checked: z.boolean(),
+  fishing_gear_checked: z.boolean(),
+  gauges_checked: z.boolean(),
+  cooling_water_checked: z.boolean(),
+  engine_checked: z.boolean(),
+  // アルコール・健康確認
   alcohol_checked: z.boolean(),
-  departure_judgement: z.enum(["go", "cancel", "hold"]),
-  cancel_reason: z.string().max(500).optional(),
+  crew_condition_checked: z.boolean(),
+  // テキスト項目
+  issue_notes: z.string().max(500).optional(),
+  inspector_name: z.string().max(100).optional(),
+  inspection_location: z.string().max(200).optional(),
+  alcohol_test_value: z.string().max(50).optional(),
   notes: z.string().max(1000).optional(),
 });
 export type PreDepartureCheckForm = z.infer<typeof PreDepartureCheckSchema>;
+
+// 出船判断通知（便管理画面の別ボタン）
+export const DepartureNoticeSchema = z.object({
+  judgement: z.enum(["go", "cancel"]),
+  cancel_reason: z.string().max(500).optional(),
+});
+export type DepartureNotice = z.infer<typeof DepartureNoticeSchema>;
 
 // =====================
 // 乗務記録（DutyLog）
@@ -123,15 +160,18 @@ export type PreDepartureCheckForm = z.infer<typeof PreDepartureCheckSchema>;
 export const DutyLogSchema = z.object({
   trip_id: z.string().uuid("便 ID は必須です"),
   boat_id: z.string().uuid().optional(),
-  departure_at: z.string().optional(), // ISO string
+  departure_at: z.string().optional(),
   return_at: z.string().optional(),
+  departure_location: z.string().max(200).optional(),
+  arrival_location: z.string().max(200).optional(),
+  captain_name: z.string().max(100).optional(),
   passenger_count: z.coerce.number().int().min(0).max(200).optional(),
+  weather: z.string().max(1000).optional(),
   fishing_area: z.string().max(200).optional(),
-  weather: z.string().max(100).optional(),
-  sea_condition: z.string().max(100).optional(),
-  safety_guidance: z.string().max(1000).optional(),
-  incident_report: z.string().max(2000).optional(),
   catch_summary: z.string().max(2000).optional(),
+  incident_report: z.string().max(2000).optional(),
+  emergency_contact_log: z.string().max(2000).optional(),
+  operator_opinion: z.string().max(1000).optional(),
   notes: z.string().max(1000).optional(),
 });
 export type DutyLogForm = z.infer<typeof DutyLogSchema>;
@@ -141,13 +181,21 @@ export type DutyLogForm = z.infer<typeof DutyLogSchema>;
 // =====================
 
 export const CouponCreateSchema = z.object({
-  title: z.string().min(1, "タイトルは必須です").max(100),
+  title: z.string().max(100).optional(),
   description: z.string().max(500).optional(),
   discount_type: z.enum(["amount", "percent", "benefit"]).optional(),
-  discount_value: z.coerce.number().min(0).max(100000).optional(),
-  valid_from: z.string().optional(), // ISO string
+  discount_value: z.coerce
+    .number()
+    .int("整数で入力してください")
+    .min(100, "100円以上で入力してください")
+    .max(100000, "100,000円以下で入力してください")
+    .optional(),
+  date_restriction: z.enum(["none", "weekdays", "weekends", "specific"]).default("none"),
+  specific_dates: z.string().optional(), // "YYYY-MM-DD,YYYY-MM-DD,..."
+  valid_from: z.string().optional(),
   valid_to: z.string().optional(),
   is_active: z.boolean().default(true),
+  segment: z.enum(["all", "once", "five_plus", "ten_plus"]).default("all"),
 });
 export type CouponCreate = z.infer<typeof CouponCreateSchema>;
 
