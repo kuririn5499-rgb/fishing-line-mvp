@@ -35,7 +35,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { idToken, accountSlug } = parsed.data;
+    const { idToken, accountSlug, displayName, pictureUrl } = parsed.data;
     const liffId = getLiffId(mode);
 
     console.log("[api/auth] mode:", mode, "accountSlug:", accountSlug, "liffId:", liffId);
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const session = await loginWithLineToken({ idToken, accountSlug, liffId });
+    const session = await loginWithLineToken({ idToken, accountSlug, liffId, displayName, pictureUrl });
 
     return NextResponse.json({
       role: session.role,

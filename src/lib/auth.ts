@@ -60,12 +60,17 @@ export async function loginWithLineToken(params: {
   idToken: string;
   accountSlug: string;
   liffId: string;
+  displayName?: string;
+  pictureUrl?: string;
 }): Promise<SessionUser> {
-  const { idToken, accountSlug, liffId } = params;
+  const { idToken, accountSlug, liffId, displayName: clientDisplayName, pictureUrl: clientPictureUrl } = params;
 
   // 1. LINE サーバーでトークンを検証
   const lineProfile = await verifyLineIdToken(idToken, liffId);
   const lineUserId = lineProfile.sub;
+  // クライアントから取得したプロフィールを優先（IDトークンにname/pictureが含まれない場合の対策）
+  const resolvedName = clientDisplayName || lineProfile.name || null;
+  const resolvedPicture = clientPictureUrl || lineProfile.picture || null;
 
   const supabase = createServerSupabaseClient();
 
@@ -103,8 +108,8 @@ export async function loginWithLineToken(params: {
       .insert({
         account_id: accountId,
         line_user_id: lineUserId,
-        display_name: lineProfile.name,
-        picture_url: lineProfile.picture,
+        display_name: resolvedName,
+        picture_url: resolvedPicture,
         role: "customer" satisfies Role,
         is_active: true,
       })
@@ -120,15 +125,15 @@ export async function loginWithLineToken(params: {
     await supabase.from("customers").insert({
       account_id: accountId,
       user_id: newUser.id,
-      full_name: lineProfile.name,
+      full_name: resolvedName,
     });
   } else {
     // 表示名・アイコンを最新の LINE プロフィールで更新
     await supabase
       .from("users")
       .update({
-        display_name: lineProfile.name,
-        picture_url: lineProfile.picture,
+        display_name: resolvedName,
+        picture_url: resolvedPicture,
         updated_at: new Date().toISOString(),
       })
       .eq("id", user.id);
@@ -138,8 +143,8 @@ export async function loginWithLineToken(params: {
     userId: user.id,
     accountId,
     lineUserId,
-    displayName: lineProfile.name ?? user.display_name,
-    pictureUrl: lineProfile.picture ?? user.picture_url,
+    displayName: resolvedName ?? user.display_name,
+    pictureUrl: resolvedPicture ?? user.picture_url,
     role: user.role as Role,
   };
 

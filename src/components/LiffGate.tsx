@@ -38,10 +38,17 @@ export function LiffGate({ liffId, accountSlug, mode, redirectTo }: LiffGateProp
         const idToken = liff.getIDToken();
         if (!idToken) throw new Error("idToken が取得できませんでした");
 
+        const profile = await liff.getProfile();
+
         const res = await fetch(`/api/auth?mode=${mode}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken, accountSlug }),
+          body: JSON.stringify({
+            idToken,
+            accountSlug,
+            displayName: profile.displayName,
+            pictureUrl: profile.pictureUrl,
+          }),
         });
 
         const json = await res.json();

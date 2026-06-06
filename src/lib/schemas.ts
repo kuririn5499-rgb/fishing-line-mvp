@@ -20,6 +20,8 @@ const postalCodeRegex = /^\d{3}-?\d{4}$/;
 export const AuthRequestSchema = z.object({
   idToken: z.string().min(1, "idToken は必須です"),
   accountSlug: z.string().min(1, "accountSlug は必須です"),
+  displayName: z.string().optional(),
+  pictureUrl: z.string().optional(),
 });
 export type AuthRequest = z.infer<typeof AuthRequestSchema>;
 
