@@ -20,9 +20,14 @@ export function resolveCredentials(account?: {
   google_service_account_email?: string | null;
   google_service_account_private_key?: string | null;
 } | null): GoogleCalendarCredentials | null {
-  const calendarId = account?.google_calendar_id ?? process.env.GOOGLE_CALENDAR_ID ?? "";
-  const email = account?.google_service_account_email ?? process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? "";
-  const privateKey = (account?.google_service_account_private_key ?? process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY ?? "").replace(/\\n/g, "\n");
+  const calendarId = (account?.google_calendar_id ?? process.env.GOOGLE_CALENDAR_ID ?? "").trim();
+  const email = (account?.google_service_account_email ?? process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? "").trim();
+
+  // 秘密鍵: DBの値が短すぎる場合はenv変数を優先する（コピペ欠損対策）
+  const dbKey = account?.google_service_account_private_key ?? "";
+  const envKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY ?? "";
+  const rawKey = dbKey.length > 100 && dbKey.length >= envKey.length * 0.95 ? dbKey : (envKey || dbKey);
+  const privateKey = rawKey.replace(/\\n/g, "\n").trim();
 
   if (!calendarId || !email || !privateKey) return null;
   return { calendarId, email, privateKey };
