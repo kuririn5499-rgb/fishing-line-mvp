@@ -48,11 +48,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "便が見つかりません" }, { status: 404 });
     }
 
-    // 乗務記録の catch_summary を更新
+    // 乗務記録の catch_summary を保存（記録がなければ作成）
     await supabase
       .from("duty_logs")
-      .update({ catch_summary, updated_at: new Date().toISOString() })
-      .eq("trip_id", trip_id);
+      .upsert(
+        { trip_id, account_id: session.accountId, catch_summary, recorded_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { onConflict: "trip_id" }
+      );
 
     // message_logs に保存
     const messages = buildFishingReportMessage({
@@ -75,11 +77,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // LINE Broadcast 送信（チャンネルアクセストークンが設定されている場合）
     const { data: account } = await supabase
       .from("accounts")
-      .select("line_channel_id")
+      .select("line_channel_access_token")
       .eq("id", session.accountId)
       .maybeSingle();
 
-    const token = account?.line_channel_id;
+    const token = account?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN;
     if (token) {
       await sendBroadcastMessage(token, messages);
     }

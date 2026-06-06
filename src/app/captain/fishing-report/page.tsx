@@ -16,17 +16,19 @@ export default async function FishingReportPage() {
   const supabase = createServerSupabaseClient();
   const today = todayJST();
 
-  // 本日以降のキャンセル以外の便
+  // 過去7日〜今後30日のキャンセル以外の便（釣行後の投稿に対応）
+  const since = new Date();
+  since.setDate(since.getDate() - 7);
   const until = new Date();
   until.setDate(until.getDate() + 30);
   const { data: trips } = await supabase
     .from("trips")
     .select("id, trip_date, departure_time, target_species, boats(name)")
     .eq("account_id", session.accountId)
-    .gte("trip_date", today)
+    .gte("trip_date", since.toISOString().slice(0, 10))
     .lte("trip_date", until.toISOString().slice(0, 10))
     .neq("status", "cancelled")
-    .order("trip_date", { ascending: true })
+    .order("trip_date", { ascending: false })
     .order("departure_time", { ascending: true });
 
   // account の LINE チャンネルアクセストークン
@@ -46,7 +48,7 @@ export default async function FishingReportPage() {
       {!trips || trips.length === 0 ? (
         <Card>
           <p className="text-sm text-gray-400 text-center py-6">
-            本日の便がありません
+            釣果を投稿できる便がありません
           </p>
         </Card>
       ) : (
