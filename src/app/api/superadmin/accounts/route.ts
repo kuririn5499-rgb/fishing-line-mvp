@@ -14,7 +14,7 @@ export async function GET() {
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
     .from("accounts")
-    .select("id, slug, name, boat_name, liff_id_customer, liff_id_captain, line_channel_access_token, line_channel_secret, contact_email, contact_phone, prefecture, is_active, created_at")
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
