@@ -12,9 +12,11 @@ export default function NewAccountPage() {
     liff_id_customer: "", liff_id_captain: "",
     line_channel_access_token: "", line_channel_secret: "",
     contact_email: "", contact_phone: "", prefecture: "",
+    feature_points: true, feature_coupon: true,
   });
 
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const setStr = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const setBool = (k: string, v: boolean) => setForm((f) => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,12 +42,25 @@ export default function NewAccountPage() {
       <label className="text-xs font-medium text-gray-600">{label}{required && " *"}</label>
       <input
         type={type}
-        value={(form as Record<string, string>)[k]}
-        onChange={(e) => set(k, e.target.value)}
+        value={(form as Record<string, string | boolean>)[k] as string}
+        onChange={(e) => setStr(k, e.target.value)}
         placeholder={placeholder}
         required={required}
         className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
       />
+    </div>
+  );
+
+  const Toggle = ({ label, k }: { label: string; k: "feature_points" | "feature_coupon" }) => (
+    <div className="flex items-center justify-between">
+      <label className="text-sm font-medium text-gray-700">{label}</label>
+      <button
+        type="button"
+        onClick={() => setBool(k, !form[k])}
+        className={`px-4 py-1.5 rounded-xl text-xs font-medium ${form[k] ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-400"}`}
+      >
+        {form[k] ? "ON" : "OFF"}
+      </button>
     </div>
   );
 
@@ -65,6 +80,11 @@ export default function NewAccountPage() {
         <Field label="都道府県" k="prefecture" placeholder="長崎県" />
         <Field label="連絡先メール" k="contact_email" type="email" placeholder="info@nagasakimaru.jp" />
         <Field label="連絡先電話" k="contact_phone" placeholder="090-1234-5678" />
+
+        <hr className="border-gray-100" />
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">機能設定</p>
+        <Toggle label="ポイント機能" k="feature_points" />
+        <Toggle label="クーポン機能" k="feature_coupon" />
 
         <hr className="border-gray-100" />
         <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">LINE / LIFF 設定</p>

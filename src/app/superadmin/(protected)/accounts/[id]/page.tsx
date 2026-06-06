@@ -9,6 +9,7 @@ interface Account {
   line_channel_access_token: string | null; line_channel_secret: string | null;
   contact_email: string | null; contact_phone: string | null;
   prefecture: string | null; is_active: boolean;
+  feature_points: boolean; feature_coupon: boolean;
 }
 
 export default function EditAccountPage() {
@@ -86,6 +87,24 @@ export default function EditAccountPage() {
         <Field label="LIFF ID（船長用）" k="liff_id_captain" />
         <Field label="LINE Channel Access Token" k="line_channel_access_token" />
         <Field label="LINE Channel Secret" k="line_channel_secret" />
+
+        <hr className="border-gray-100" />
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">機能設定</p>
+        {(["feature_points", "feature_coupon"] as const).map((k) => {
+          const labels: Record<string, string> = { feature_points: "ポイント機能", feature_coupon: "クーポン機能" };
+          return (
+            <div key={k} className="flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-700">{labels[k]}</label>
+              <button
+                type="button"
+                onClick={() => set(k, !(form[k] ?? true))}
+                className={`px-4 py-1.5 rounded-xl text-xs font-medium ${(form[k] ?? true) ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-400"}`}
+              >
+                {(form[k] ?? true) ? "ON" : "OFF"}
+              </button>
+            </div>
+          );
+        })}
 
         <hr className="border-gray-100" />
         <div className="flex items-center justify-between">

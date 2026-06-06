@@ -25,14 +25,14 @@ export async function POST(req: NextRequest) {
   if (!await checkAuth()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { slug, name, boat_name, liff_id_customer, liff_id_captain, line_channel_access_token, line_channel_secret, contact_email, contact_phone, prefecture } = body;
+  const { slug, name, boat_name, liff_id_customer, liff_id_captain, line_channel_access_token, line_channel_secret, contact_email, contact_phone, prefecture, feature_points, feature_coupon } = body;
 
   if (!slug || !name) return NextResponse.json({ error: "slug と name は必須です" }, { status: 400 });
 
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
     .from("accounts")
-    .insert({ slug, name, boat_name, liff_id_customer, liff_id_captain, line_channel_access_token, line_channel_secret, contact_email, contact_phone, prefecture, is_active: true })
+    .insert({ slug, name, boat_name, liff_id_customer, liff_id_captain, line_channel_access_token, line_channel_secret, contact_email, contact_phone, prefecture, is_active: true, feature_points: feature_points ?? true, feature_coupon: feature_coupon ?? true })
     .select()
     .single();
 

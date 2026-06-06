@@ -70,12 +70,15 @@ export default async function CustomerHomePage() {
     .sort((a, b) => (a.trip!.trip_date > b.trip!.trip_date ? 1 : -1))
     .slice(0, 5);
 
-  // 船名
+  // 船名 + フィーチャーフラグ
   const { data: account } = await supabase
     .from("accounts")
-    .select("boat_name, name")
+    .select("boat_name, name, feature_points, feature_coupon")
     .eq("id", session.accountId)
     .maybeSingle();
+
+  const featurePoints = account?.feature_points ?? true;
+  const featureCoupon = account?.feature_coupon ?? true;
 
   return (
     <div className="space-y-4">
@@ -96,7 +99,7 @@ export default async function CustomerHomePage() {
         {[
           { href: "/customer/reservations", icon: "📅", label: "予約する" },
           { href: "/customer/manifest",     icon: "📋", label: "乗船名簿" },
-          { href: "/customer/coupons",      icon: "🎟️", label: "クーポン" },
+          ...(featureCoupon ? [{ href: "/customer/coupons", icon: "🎟️", label: "クーポン" }] : []),
         ].map((item) => (
           <Link key={item.href} href={item.href}>
             <Card className="flex flex-col items-center justify-center gap-2 h-24 text-center hover:shadow-md transition-shadow">
@@ -106,19 +109,21 @@ export default async function CustomerHomePage() {
           </Link>
         ))}
 
-        <Link href="/customer/points">
-          <Card className="flex flex-col items-center justify-center gap-2 h-24 text-center hover:shadow-md transition-shadow">
-            <span className="text-3xl">⭐</span>
-            <span className="text-sm font-medium text-gray-700">
-              ポイント
-              {customer?.points != null && (
-                <span className="text-brand-600 font-bold ml-1">
-                  {customer.points.toLocaleString()} pt
-                </span>
-              )}
-            </span>
-          </Card>
-        </Link>
+        {featurePoints && (
+          <Link href="/customer/points">
+            <Card className="flex flex-col items-center justify-center gap-2 h-24 text-center hover:shadow-md transition-shadow">
+              <span className="text-3xl">⭐</span>
+              <span className="text-sm font-medium text-gray-700">
+                ポイント
+                {customer?.points != null && (
+                  <span className="text-brand-600 font-bold ml-1">
+                    {customer.points.toLocaleString()} pt
+                  </span>
+                )}
+              </span>
+            </Card>
+          </Link>
+        )}
       </div>
 
       {/* 予約中の便 */}
