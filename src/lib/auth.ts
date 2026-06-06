@@ -71,9 +71,29 @@ export async function loginWithLineToken(params: {
   // 1. LINE サーバーでトークンを検証
   const lineProfile = await verifyLineIdToken(idToken, liffId);
   const lineUserId = lineProfile.sub;
-  // クライアントから取得したプロフィールを優先（IDトークンにname/pictureが含まれない場合の対策）
-  const resolvedName = clientDisplayName || lineProfile.name || null;
-  const resolvedPicture = clientPictureUrl || lineProfile.picture || null;
+
+  // Messaging API でプロフィールを取得（最も確実な方法）
+  let messagingName: string | null = null;
+  let messagingPicture: string | null = null;
+  const channelToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  if (channelToken) {
+    try {
+      const profileRes = await fetch(`https://api.line.me/v2/bot/profile/${lineUserId}`, {
+        headers: { Authorization: `Bearer ${channelToken}` },
+      });
+      if (profileRes.ok) {
+        const p = await profileRes.json();
+        messagingName = p.displayName ?? null;
+        messagingPicture = p.pictureUrl ?? null;
+      }
+    } catch {
+      // プロフィール取得失敗は無視してフォールバック
+    }
+  }
+
+  // 優先順: Messaging API → LIFF getProfile → IDトークン
+  const resolvedName = messagingName || clientDisplayName || lineProfile.name || null;
+  const resolvedPicture = messagingPicture || clientPictureUrl || lineProfile.picture || null;
 
   const supabase = createServerSupabaseClient();
 
