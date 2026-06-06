@@ -28,12 +28,15 @@ export default async function CustomerHomePage() {
     .order("departure_time", { ascending: true })
     .limit(5);
 
-  // 自分の顧客レコード（ポイント + id）
+  // 自分の顧客レコード（ポイント + id + 氏名）
   const { data: customer } = await supabase
     .from("customers")
-    .select("id, points")
+    .select("id, points, full_name")
     .eq("user_id", session.userId)
     .maybeSingle();
+
+  // 表示名: customers.full_name → session.displayName → "お客様" の優先順
+  const displayName = customer?.full_name || session.displayName || null;
 
   // 自分の今後の予約（直近20件取得してJSで絞り込み）
   const { data: myReservationsRaw } = customer
@@ -84,7 +87,7 @@ export default async function CustomerHomePage() {
           </p>
         )}
         <h1 className="text-xl font-bold text-sea-dark">
-          {session.displayName ?? "お客様"} さん
+          {displayName ?? "お客様"} さん
         </h1>
       </div>
 
