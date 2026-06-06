@@ -72,10 +72,27 @@ export async function loginWithLineToken(params: {
   const lineProfile = await verifyLineIdToken(idToken, liffId);
   const lineUserId = lineProfile.sub;
 
-  // Messaging API でプロフィールを取得（最も確実な方法）
+  const supabase = createServerSupabaseClient();
+
+  // 2. account_id と LINE credentials を slug から取得
+  console.log("[auth] searching account slug:", accountSlug);
+  const { data: account, error: accountErr } = await supabase
+    .from("accounts")
+    .select("id, line_channel_access_token")
+    .eq("slug", accountSlug)
+    .single();
+
+  console.log("[auth] account result:", account, "error:", accountErr?.message);
+
+  if (accountErr || !account) {
+    throw new Error(`アカウント "${accountSlug}" が見つかりません`);
+  }
+  const accountId = account.id;
+
+  // Messaging API でプロフィールを取得（DB のトークンを優先、env var にフォールバック）
   let messagingName: string | null = null;
   let messagingPicture: string | null = null;
-  const channelToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const channelToken = account.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN;
   if (channelToken) {
     try {
       const profileRes = await fetch(`https://api.line.me/v2/bot/profile/${lineUserId}`, {
@@ -94,23 +111,6 @@ export async function loginWithLineToken(params: {
   // 優先順: Messaging API → LIFF getProfile → IDトークン
   const resolvedName = messagingName || clientDisplayName || lineProfile.name || null;
   const resolvedPicture = messagingPicture || clientPictureUrl || lineProfile.picture || null;
-
-  const supabase = createServerSupabaseClient();
-
-  // 2. account_id を slug から取得
-  console.log("[auth] searching account slug:", accountSlug);
-  const { data: account, error: accountErr } = await supabase
-    .from("accounts")
-    .select("id")
-    .eq("slug", accountSlug)
-    .single();
-
-  console.log("[auth] account result:", account, "error:", accountErr?.message);
-
-  if (accountErr || !account) {
-    throw new Error(`アカウント "${accountSlug}" が見つかりません`);
-  }
-  const accountId = account.id;
 
   // 3. users テーブルから検索
   const { data: existingUser, error: userErr } = await supabase
