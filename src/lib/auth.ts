@@ -138,8 +138,8 @@ export async function loginWithLineToken(params: {
     userId: user.id,
     accountId,
     lineUserId,
-    displayName: user.display_name,
-    pictureUrl: user.picture_url,
+    displayName: lineProfile.name ?? user.display_name,
+    pictureUrl: lineProfile.picture ?? user.picture_url,
     role: user.role as Role,
   };
 
