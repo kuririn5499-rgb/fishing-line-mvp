@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { TripStatusUpdateSchema } from "@/lib/schemas";
 import { updateTripStatus, getTripById, setTripGcalEventId } from "@/lib/repositories/trips";
-import { createTripEvent, deleteTripEvent } from "@/lib/google-calendar";
+import { createTripEvent, deleteTripEvent, resolveCredentials } from "@/lib/google-calendar";
 import { createServerSupabaseClient } from "@/lib/supabase";
 
 export async function PATCH(
@@ -41,8 +41,15 @@ export async function PATCH(
     const supabase = createServerSupabaseClient();
     let calWarning: string | undefined;
 
+    // アカウントの Google Calendar 認証情報を取得
+    const { data: account } = await supabase
+      .from("accounts")
+      .select("google_calendar_id, google_service_account_email, google_service_account_private_key")
+      .eq("id", session.accountId)
+      .maybeSingle();
+    const creds = resolveCredentials(account);
+
     if (newStatus === "cancelled") {
-      // 紐づく全予約をキャンセルに一括更新
       await supabase
         .from("reservations")
         .update({ status: "cancelled", updated_at: new Date().toISOString() })
@@ -50,16 +57,13 @@ export async function PATCH(
         .eq("account_id", session.accountId)
         .in("status", ["pending", "confirmed", "waitlist"]);
 
-      // カレンダーイベント削除
-      if (trip.gcal_event_id) {
+      if (trip.gcal_event_id && creds) {
         try {
-          await deleteTripEvent(trip.gcal_event_id);
+          await deleteTripEvent(trip.gcal_event_id, creds);
         } catch (delErr) {
-          // 既に削除済み(404)などの場合も警告だけ返す
           calWarning = delErr instanceof Error ? delErr.message : "カレンダー削除失敗";
           console.error("[trips/status] カレンダー削除失敗:", delErr);
         }
-        // 成否に関わらず gcal_event_id をクリア（再試行ループを防ぐ）
         await setTripGcalEventId(id, "").catch((e) =>
           console.error("[trips/status] gcal_event_id クリア失敗:", e)
         );
@@ -68,9 +72,9 @@ export async function PATCH(
       (trip.status === "cancelled" || trip.status === "completed") &&
       newStatus === "open" &&
       trip.departure_time &&
-      trip.return_time
+      trip.return_time &&
+      creds
     ) {
-      // キャンセル/完了 → 受付中に復帰: イベント再作成
       try {
         const { count: reservedCount } = await supabase
           .from("reservations")
@@ -86,7 +90,7 @@ export async function PATCH(
           targetSpecies: trip.target_species ?? undefined,
           capacity: trip.capacity ?? undefined,
           reservedCount: reservedCount ?? 0,
-        });
+        }, creds);
         await setTripGcalEventId(id, gcalEventId);
       } catch (calErr) {
         calWarning = calErr instanceof Error ? calErr.message : "カレンダー再作成失敗";

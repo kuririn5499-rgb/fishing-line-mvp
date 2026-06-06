@@ -1,11 +1,11 @@
 /**
  * /admin/settings — アカウント設定
- * LINE・LIFF・Google Sheets の設定を表示する
  */
 
 import { getSession } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
+import { GoogleCalendarSettingsForm } from "@/components/forms/GoogleCalendarSettingsForm";
 
 export default async function AdminSettingsPage() {
   const session = await getSession();
@@ -46,12 +46,6 @@ export default async function AdminSettingsPage() {
             </dd>
           </div>
           <div className="flex gap-2">
-            <dt className="text-gray-500 w-28 shrink-0">LINE チャンネル</dt>
-            <dd className="text-xs text-gray-600 truncate">
-              {account.line_channel_id ?? "未設定"}
-            </dd>
-          </div>
-          <div className="flex gap-2">
             <dt className="text-gray-500 w-28 shrink-0">LIFF (customer)</dt>
             <dd className="text-xs text-gray-600 truncate">
               {account.liff_id_customer ?? "未設定"}
@@ -65,7 +59,7 @@ export default async function AdminSettingsPage() {
           </div>
         </dl>
         <p className="text-xs text-gray-400 mt-4">
-          ※ 設定の変更は管理者にお問い合わせください
+          ※ LINE・LIFF の変更は管理者にお問い合わせください
         </p>
       </Card>
 
@@ -101,14 +95,18 @@ export default async function AdminSettingsPage() {
         )}
       </Card>
 
+      {/* Google カレンダー設定 */}
+      <GoogleCalendarSettingsForm
+        currentCalendarId={account.google_calendar_id ?? ""}
+        serviceAccountEmail={account.google_service_account_email ?? null}
+      />
+
       {/* Google Sheets 設定 */}
       <Card>
         <h2 className="text-sm font-bold text-gray-700 mb-2">Google Sheets</h2>
         <p className="text-xs text-gray-500">
           スプレッドシート ID: {process.env.GOOGLE_SPREADSHEET_ID ? (
-            <span className="font-mono bg-gray-100 px-1 rounded text-gray-700">
-              設定済
-            </span>
+            <span className="font-mono bg-gray-100 px-1 rounded text-gray-700">設定済</span>
           ) : (
             <span className="text-red-400">未設定</span>
           )}

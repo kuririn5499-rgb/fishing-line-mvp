@@ -4,21 +4,31 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { updateTripEventCounts } from "./google-calendar";
+import { resolveCredentials, updateTripEventCounts } from "./google-calendar";
 
 export async function syncTripCalendarCounts(
   tripId: string,
   supabase: SupabaseClient,
   accountId: string
 ): Promise<void> {
-  const { data: trip } = await supabase
-    .from("trips")
-    .select("trip_date, departure_time, return_time, target_species, capacity, gcal_event_id")
-    .eq("id", tripId)
-    .eq("account_id", accountId)
-    .maybeSingle();
+  const [{ data: trip }, { data: account }] = await Promise.all([
+    supabase
+      .from("trips")
+      .select("trip_date, departure_time, return_time, target_species, capacity, gcal_event_id")
+      .eq("id", tripId)
+      .eq("account_id", accountId)
+      .maybeSingle(),
+    supabase
+      .from("accounts")
+      .select("google_calendar_id, google_service_account_email, google_service_account_private_key")
+      .eq("id", accountId)
+      .maybeSingle(),
+  ]);
 
   if (!trip?.departure_time || !trip.return_time) return;
+
+  const creds = resolveCredentials(account);
+  if (!creds) return; // Google Calendar 未設定なら同期スキップ
 
   const { count: reservedCount } = await supabase
     .from("reservations")
@@ -37,7 +47,6 @@ export async function syncTripCalendarCounts(
   };
 
   if (trip.gcal_event_id) {
-    // 既存イベントの予約人数を更新する（イベント作成は船長の便登録のみ）
-    await updateTripEventCounts(trip.gcal_event_id, eventInput);
+    await updateTripEventCounts(trip.gcal_event_id, eventInput, creds);
   }
 }

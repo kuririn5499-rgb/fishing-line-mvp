@@ -10,6 +10,9 @@ interface Account {
   contact_email: string | null; contact_phone: string | null;
   prefecture: string | null; is_active: boolean;
   feature_points: boolean; feature_coupon: boolean;
+  google_calendar_id: string | null;
+  google_service_account_email: string | null;
+  google_service_account_private_key: string | null;
 }
 
 export default function EditAccountPage() {
@@ -87,6 +90,21 @@ export default function EditAccountPage() {
         <Field label="LIFF ID（船長用）" k="liff_id_captain" />
         <Field label="LINE Channel Access Token" k="line_channel_access_token" />
         <Field label="LINE Channel Secret" k="line_channel_secret" />
+
+        <hr className="border-gray-100" />
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Google カレンダー設定</p>
+        <Field label="カレンダー ID" k="google_calendar_id" placeholder="xxx@group.calendar.google.com" />
+        <Field label="サービスアカウント Email" k="google_service_account_email" placeholder="xxx@xxx.iam.gserviceaccount.com" />
+        <div>
+          <label className="text-xs font-medium text-gray-600">サービスアカウント 秘密鍵（Private Key）</label>
+          <textarea
+            value={(form.google_service_account_private_key as string) ?? ""}
+            onChange={(e) => set("google_service_account_private_key", e.target.value)}
+            placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;..."
+            rows={4}
+            className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+          />
+        </div>
 
         <hr className="border-gray-100" />
         <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">機能設定</p>

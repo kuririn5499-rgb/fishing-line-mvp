@@ -7,7 +7,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { TripCreateSchema } from "@/lib/schemas";
 import { getTripsByAccount, createTrip, getTripsByDate, setTripGcalEventId } from "@/lib/repositories/trips";
-import { createTripEvent } from "@/lib/google-calendar";
+import { createTripEvent, resolveCredentials } from "@/lib/google-calendar";
+import { createServerSupabaseClient } from "@/lib/supabase";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
@@ -44,18 +45,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Google カレンダーに出船予定を登録（失敗してもトリップ作成は成功扱い）
     if (trip.departure_time && trip.return_time) {
       try {
-        const gcalEventId = await createTripEvent({
-          tripId: trip.id,
-          tripDate: trip.trip_date,
-          departureTime: trip.departure_time.slice(0, 5),
-          returnTime: trip.return_time.slice(0, 5),
-          targetSpecies: trip.target_species ?? undefined,
-          capacity: trip.capacity ?? undefined,
-          reservedCount: 0,
-          notes: trip.weather_note ?? undefined,
-        });
-        await setTripGcalEventId(trip.id, gcalEventId);
-        trip.gcal_event_id = gcalEventId;
+        const supabase = createServerSupabaseClient();
+        const { data: account } = await supabase
+          .from("accounts")
+          .select("google_calendar_id, google_service_account_email, google_service_account_private_key")
+          .eq("id", session.accountId)
+          .maybeSingle();
+
+        const creds = resolveCredentials(account);
+        if (creds) {
+          const gcalEventId = await createTripEvent({
+            tripId: trip.id,
+            tripDate: trip.trip_date,
+            departureTime: trip.departure_time.slice(0, 5),
+            returnTime: trip.return_time.slice(0, 5),
+            targetSpecies: trip.target_species ?? undefined,
+            capacity: trip.capacity ?? undefined,
+            reservedCount: 0,
+            notes: trip.weather_note ?? undefined,
+          }, creds);
+          await setTripGcalEventId(trip.id, gcalEventId);
+          trip.gcal_event_id = gcalEventId;
+        }
       } catch (calErr) {
         console.error("[trips/POST] Google Calendar 登録失敗:", calErr);
       }

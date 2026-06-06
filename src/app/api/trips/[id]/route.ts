@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { TripCreateSchema } from "@/lib/schemas";
 import { updateTrip, getTripById } from "@/lib/repositories/trips";
-import { updateTripEventDetails } from "@/lib/google-calendar";
+import { updateTripEventDetails, resolveCredentials } from "@/lib/google-calendar";
 import { createServerSupabaseClient } from "@/lib/supabase";
 
 export async function PATCH(
@@ -28,31 +28,40 @@ export async function PATCH(
 
     const trip = await updateTrip(id, session.accountId, parsed.data);
 
-    // Google Calendar 更新（出港・帰港時間が両方ある場合のみ）
+    // Google Calendar 更新
     if (trip.gcal_event_id && trip.departure_time && trip.return_time) {
       try {
         const supabase = createServerSupabaseClient();
-        const { data: reservations } = await supabase
-          .from("reservations")
-          .select("passengers_count, status")
-          .eq("trip_id", trip.id)
-          .neq("status", "cancelled");
+        const [{ data: reservations }, { data: account }] = await Promise.all([
+          supabase
+            .from("reservations")
+            .select("passengers_count, status")
+            .eq("trip_id", trip.id)
+            .neq("status", "cancelled"),
+          supabase
+            .from("accounts")
+            .select("google_calendar_id, google_service_account_email, google_service_account_private_key")
+            .eq("id", session.accountId)
+            .maybeSingle(),
+        ]);
 
-        const reservedCount = (reservations ?? []).reduce(
-          (sum, r) => sum + (r.passengers_count ?? 0),
-          0
-        );
-
-        await updateTripEventDetails(trip.gcal_event_id, {
-          tripId: trip.id,
-          tripDate: trip.trip_date,
-          departureTime: trip.departure_time.slice(0, 5),
-          returnTime: trip.return_time.slice(0, 5),
-          targetSpecies: trip.target_species ?? undefined,
-          capacity: trip.capacity ?? undefined,
-          reservedCount,
-          notes: trip.weather_note ?? undefined,
-        });
+        const creds = resolveCredentials(account);
+        if (creds) {
+          const reservedCount = (reservations ?? []).reduce(
+            (sum, r) => sum + (r.passengers_count ?? 0),
+            0
+          );
+          await updateTripEventDetails(trip.gcal_event_id, {
+            tripId: trip.id,
+            tripDate: trip.trip_date,
+            departureTime: trip.departure_time.slice(0, 5),
+            returnTime: trip.return_time.slice(0, 5),
+            targetSpecies: trip.target_species ?? undefined,
+            capacity: trip.capacity ?? undefined,
+            reservedCount,
+            notes: trip.weather_note ?? undefined,
+          }, creds);
+        }
       } catch (calErr) {
         console.error("[trips/PATCH] Google Calendar 更新失敗:", calErr);
         return NextResponse.json({ trip, cal_warning: "カレンダー更新に失敗しました" });
