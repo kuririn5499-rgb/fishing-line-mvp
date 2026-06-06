@@ -11,7 +11,6 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FormField, Select } from "@/components/ui/FormField";
 import { Button } from "@/components/ui/Button";
-import { supabaseBrowser } from "@/lib/supabase";
 import { compressImage } from "@/lib/compress-image";
 
 const FishingReportSchema = z.object({
@@ -92,20 +91,18 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
         compressed = await Promise.all(imageFiles.map((f) => compressImage(f)));
       }
 
-      // 2. Supabase Storage へアップロード
+      // 2. API 経由でサーバーサイドアップロード（RLS 回避）
       const imageUrls: string[] = [];
       if (compressed.length > 0) {
         setStatus("uploading");
         for (const file of compressed) {
-          const path = `fishing-reports/${data.trip_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-          const { error } = await supabaseBrowser.storage
-            .from("fishing-reports")
-            .upload(path, file, { upsert: false });
-          if (error) throw new Error(`アップロード失敗: ${error.message}`);
-          const { data: urlData } = supabaseBrowser.storage
-            .from("fishing-reports")
-            .getPublicUrl(path);
-          imageUrls.push(urlData.publicUrl);
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("trip_id", data.trip_id);
+          const res = await fetch("/api/upload", { method: "POST", body: fd });
+          const json = await res.json();
+          if (!res.ok) throw new Error(`アップロード失敗: ${json.error}`);
+          imageUrls.push(json.url);
         }
       }
 
