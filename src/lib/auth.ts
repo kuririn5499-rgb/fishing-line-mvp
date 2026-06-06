@@ -36,7 +36,10 @@ export async function getSession(): Promise<SessionUser | null> {
   const raw = store.get(SESSION_COOKIE)?.value;
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as SessionUser;
+    const session = JSON.parse(raw) as SessionUser;
+    // displayName が未設定の古いセッションは再認証させる
+    if (!session.displayName) return null;
+    return session;
   } catch {
     return null;
   }
