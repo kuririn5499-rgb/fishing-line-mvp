@@ -1,38 +1,22 @@
-/**
- * customer レイアウト
- * セッションがあればそのまま表示、なければ LIFF 初期化を行う
- */
-
 import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { LiffGate } from "@/components/LiffGate";
+import { CustomerAccountMismatchGuard } from "@/components/customer/AccountMismatchGuard";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import type { ReactNode } from "react";
 
-export default async function CustomerLayout({
-  children,
-  searchParams,
-}: {
-  children: ReactNode;
-  searchParams?: Promise<{ a?: string }>;
-}) {
+export default async function CustomerLayout({ children }: { children: ReactNode }) {
   const session = await getSession();
 
-  // captain 以上が誤って customer URL に来た場合はリダイレクト
-  if (session?.role === "captain" || session?.role === "staff") redirect("/captain");
-  if (session?.role === "admin" || session?.role === "operator") redirect("/admin");
+  const supabase = createServerSupabaseClient();
 
-  // セッションなし → LIFF 初期化をクライアントで行う
+  // セッションなし → LIFF 初期化（?a=slug はミドルウェアがセッションを除去済み）
   if (!session) {
-    const params = await searchParams;
-    const slug = params?.a ?? process.env.ACCOUNT_SLUG ?? "demo";
-
-    // DB からアカウント情報（LIFF ID）を取得
-    const supabase = createServerSupabaseClient();
+    const slug = process.env.ACCOUNT_SLUG ?? "demo";
     const { data: account } = await supabase
       .from("accounts")
-      .select("liff_id_customer, slug")
+      .select("liff_id_customer")
       .eq("slug", slug)
       .maybeSingle();
 
@@ -48,12 +32,29 @@ export default async function CustomerLayout({
     );
   }
 
+  // captain / staff が誤って customer URL に来た場合
+  if (session.role === "captain" || session.role === "staff") redirect("/captain");
+
+  const { data: accountInfo } = await supabase
+    .from("accounts")
+    .select("liff_id_customer, slug")
+    .eq("id", session.accountId)
+    .maybeSingle();
+
+  const customerLiffId = accountInfo?.liff_id_customer ?? process.env.NEXT_PUBLIC_LIFF_ID_CUSTOMER ?? "";
+  const accountSlug = accountInfo?.slug ?? process.env.ACCOUNT_SLUG ?? "";
+
   return (
     <AppShell
       role={session.role}
+      navType="customer"
       displayName={session.displayName}
       pictureUrl={session.pictureUrl}
     >
+      <CustomerAccountMismatchGuard
+        accountSlug={accountSlug}
+        customerLiffId={customerLiffId}
+      />
       {children}
     </AppShell>
   );

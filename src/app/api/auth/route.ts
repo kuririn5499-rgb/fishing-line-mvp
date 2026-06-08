@@ -9,22 +9,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loginWithLineToken } from "@/lib/auth";
 import { AuthRequestSchema } from "@/lib/schemas";
-
-// LIFF ID を role ごとに決定するロジック
-// 実際は accountSlug から DB の liff_id を引くのが望ましいが、
-// MVP では env 変数を使う
-function getLiffId(mode: string | null): string {
-  if (mode === "captain") {
-    return process.env.NEXT_PUBLIC_LIFF_ID_CAPTAIN ?? "";
-  }
-  return process.env.NEXT_PUBLIC_LIFF_ID_CUSTOMER ?? "";
-}
+import { createServerSupabaseClient } from "@/lib/supabase";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const body = await req.json();
 
-    // クエリパラメータで LIFF モードを判定（customer / captain）
     const mode = req.nextUrl.searchParams.get("mode");
 
     const parsed = AuthRequestSchema.safeParse(body);
@@ -36,9 +26,68 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const { idToken, accountSlug, displayName, pictureUrl } = parsed.data;
-    const liffId = getLiffId(mode);
 
-    console.log("[api/auth] mode:", mode, "accountSlug:", accountSlug, "liffId:", liffId);
+    // JWT の aud クレームからチャンネル ID を取得してアカウントを逆引き
+    // liff.init() に間違った liffId が渡された場合でも正しいアカウントを特定できる
+    let resolvedSlug = accountSlug;
+    let liffId = "";
+
+    const supabase = createServerSupabaseClient();
+
+    let acct: {
+      id: string;
+      slug: string;
+      liff_id_captain: string | null;
+      liff_id_customer: string | null;
+    } | null = null;
+
+    // トークンから channel ID を取得
+    try {
+      const payloadB64 = idToken.split(".")[1];
+      const payloadJson = Buffer.from(payloadB64, "base64url").toString("utf-8");
+      const payload = JSON.parse(payloadJson) as { aud?: string | string[] };
+      const aud = payload.aud;
+      const channelId = Array.isArray(aud) ? aud[0] : aud;
+
+      if (channelId) {
+        const field = mode === "captain" ? "liff_id_captain" : "liff_id_customer";
+        const { data } = await supabase
+          .from("accounts")
+          .select("id, slug, liff_id_captain, liff_id_customer")
+          .like(field, `${channelId}-%`)
+          .maybeSingle();
+        acct = data;
+        console.log("[api/auth] channel lookup:", channelId, "->", acct?.slug ?? "not found");
+      }
+    } catch {
+      // JWT デコード失敗は無視してスラッグフォールバックへ
+    }
+
+    // チャンネル逆引きが失敗した場合はクライアント指定の accountSlug で検索
+    if (!acct) {
+      const { data } = await supabase
+        .from("accounts")
+        .select("id, slug, liff_id_captain, liff_id_customer")
+        .eq("slug", accountSlug)
+        .maybeSingle();
+      acct = data;
+      console.log("[api/auth] slug fallback:", accountSlug, "->", acct?.slug ?? "not found");
+    }
+
+    if (!acct) {
+      return NextResponse.json(
+        { error: `アカウント "${accountSlug}" が見つかりません` },
+        { status: 404 }
+      );
+    }
+
+    resolvedSlug = acct.slug;
+    liffId =
+      mode === "captain"
+        ? (acct.liff_id_captain ?? process.env.NEXT_PUBLIC_LIFF_ID_CAPTAIN ?? "")
+        : (acct.liff_id_customer ?? process.env.NEXT_PUBLIC_LIFF_ID_CUSTOMER ?? "");
+
+    console.log("[api/auth] mode:", mode, "resolvedSlug:", resolvedSlug, "liffId:", liffId);
 
     if (!liffId) {
       return NextResponse.json(
@@ -47,12 +96,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const session = await loginWithLineToken({ idToken, accountSlug, liffId, displayName, pictureUrl });
+    const session = await loginWithLineToken({
+      idToken,
+      accountSlug: resolvedSlug,
+      liffId,
+      displayName,
+      pictureUrl,
+    });
 
     return NextResponse.json({
       role: session.role,
       userId: session.userId,
       displayName: session.displayName,
+      accountSlug: resolvedSlug,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "認証エラー";
