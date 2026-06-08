@@ -67,6 +67,7 @@ export async function POST(req: Request) {
   const session: SessionUser = {
     userId: DEV_USER_ID,
     accountId: account.id,
+    accountSlug: slug,
     lineUserId: "dev-line-user",
     displayName: `開発ユーザー（${role}）`,
     pictureUrl: null,

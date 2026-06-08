@@ -3,30 +3,30 @@ import { NextRequest, NextResponse } from "next/server";
 const SESSION_COOKIE = "fishing_session";
 
 /**
- * ?a=slug が URL にある場合、セッションクッキーをリクエストから除去する。
- * Next.js レイアウトは searchParams を受け取れないうえ、
- * サーバーコンポーネントからクッキーを削除もできないため、
- * ミドルウェアで処理してレイアウト到達前にセッションを無効化する。
+ * ?a=slug が URL にある場合、セッションのアカウントと比較する。
+ * 異なるアカウントならセッションを削除して同じ URL にリダイレクト。
+ * ブラウザが実際に Set-Cookie でクッキーを削除してから再アクセスするため、
+ * 次のリクエストで layout はセッションなしと判断して LiffGate を正しく起動できる。
  */
 export function middleware(req: NextRequest) {
   const a = req.nextUrl.searchParams.get("a");
   if (!a) return NextResponse.next();
 
-  // リクエストの Cookie ヘッダーからセッションを除去（layout が見る前に）
-  const cookieHeader = req.headers.get("cookie") ?? "";
-  const filtered = cookieHeader
-    .split(";")
-    .filter((c) => !c.trim().startsWith(`${SESSION_COOKIE}=`))
-    .join(";");
+  const raw = req.cookies.get(SESSION_COOKIE)?.value;
+  if (!raw) return NextResponse.next(); // セッションなし: そのまま
 
-  const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("cookie", filtered);
+  try {
+    const session = JSON.parse(raw) as { accountSlug?: string };
+    // 同じアカウント: 不要なリダイレクトをしない
+    if (session.accountSlug === a) return NextResponse.next();
+  } catch {
+    // パース失敗: セッションクリアして再認証
+  }
 
-  const res = NextResponse.next({ request: { headers: requestHeaders } });
-
-  // ブラウザ側のセッションクッキーも削除
+  // 別アカウントのセッションが残っている → セッション削除 + 同 URL にリダイレクト
+  // ブラウザがクッキーを削除してから再アクセス → セッションなし → LiffGate が正しく動く
+  const res = NextResponse.redirect(req.url);
   res.cookies.delete(SESSION_COOKIE);
-
   return res;
 }
 

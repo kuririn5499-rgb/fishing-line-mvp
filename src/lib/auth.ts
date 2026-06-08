@@ -37,8 +37,8 @@ export async function getSession(): Promise<SessionUser | null> {
   if (!raw) return null;
   try {
     const session = JSON.parse(raw) as SessionUser;
-    // displayName が未設定の古いセッションは再認証させる
-    if (!session.displayName) return null;
+    // 古いセッション（displayName または accountSlug 未設定）は再認証させる
+    if (!session.displayName || !session.accountSlug) return null;
     return session;
   } catch {
     return null;
@@ -165,6 +165,7 @@ export async function loginWithLineToken(params: {
   const session: SessionUser = {
     userId: user.id,
     accountId,
+    accountSlug,
     lineUserId,
     displayName: resolvedName ?? user.display_name,
     pictureUrl: resolvedPicture ?? user.picture_url,

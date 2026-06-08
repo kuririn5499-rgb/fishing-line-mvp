@@ -16,7 +16,8 @@ export type TripStatus =
   | "full"
   | "confirmed"
   | "cancelled"
-  | "completed";
+  | "completed"
+  | "closed";
 
 export type ReservationStatus =
   | "pending"
@@ -26,6 +27,21 @@ export type ReservationStatus =
   | "completed";
 
 export type DepartureJudgement = "go" | "cancel" | "hold";
+
+export type TripRequestStatus = "pending" | "approved" | "rejected";
+
+export interface TripRequest {
+  id: string;
+  account_id: string;
+  user_id: string | null;
+  requested_date: string;
+  target_species: string | null;
+  message: string | null;
+  status: TripRequestStatus;
+  trip_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export type DiscountType = "amount" | "percent" | "benefit";
 export type DateRestriction = "none" | "weekdays" | "weekends" | "specific";
@@ -316,6 +332,7 @@ export interface PointLog {
 export interface SessionUser {
   userId: string;
   accountId: string;
+  accountSlug: string;
   lineUserId: string;
   displayName: string | null;
   pictureUrl: string | null;
