@@ -2,14 +2,6 @@
 
 import { useEffect } from "react";
 
-/**
- * セッションのアカウントと実際に開かれているLIFFが異なる場合に
- * セッションをクリアして再認証する。
- *
- * 検出方法:
- * 1. URL の ?a= とセッションのスラッグを比較
- * 2. liff.getContext() で実際の liffId とセッションの liffId を比較
- */
 export function AccountMismatchGuard({
   accountSlug,
   captainLiffId,
@@ -19,7 +11,7 @@ export function AccountMismatchGuard({
 }) {
   useEffect(() => {
     async function check() {
-      // 方法1: URL の ?a= と比較（高速）
+      // 方法1: URL の ?a= とセッションのスラッグを比較（高速）
       const urlSlug = new URLSearchParams(window.location.search).get("a");
       if (urlSlug && urlSlug !== accountSlug) {
         await fetch("/api/auth", { method: "DELETE" });
@@ -27,18 +19,27 @@ export function AccountMismatchGuard({
         return;
       }
 
-      // 方法2: LIFF コンテキストの liffId と比較
-      // captainLiffId がない or LINE ブラウザ外はスキップ
-      if (!captainLiffId) return;
-      // LINE ブラウザ外はスキップ
-      if (!/Line\//i.test(navigator.userAgent)) return;
+      // 方法2: LINE ブラウザ内での初回アクセス判定
+      // sessionStorage は LIFF を閉じて再度開くとリセットされるため
+      // 「別のLIFFに切り替えた = 初回アクセス」として再認証する
+      const isLineBrowser = /Line\//i.test(navigator.userAgent);
+      if (isLineBrowser) {
+        const initialized = sessionStorage.getItem("liff_app_initialized");
+        if (!initialized) {
+          // フラグを先にセット（リロード後のループ防止）
+          sessionStorage.setItem("liff_app_initialized", "1");
+          await fetch("/api/auth", { method: "DELETE" });
+          window.location.reload();
+          return;
+        }
+      }
 
+      // 方法3: LIFF コンテキストの JWT aud とセッションのチャンネルを比較（追加の保護）
+      if (!captainLiffId || !isLineBrowser) return;
       try {
         const liff = (await import("@line/liff")).default;
         await liff.init({ liffId: captainLiffId });
 
-        // liff.getContext().liffId は init に渡した値を返すため信頼できない。
-        // IDトークンの aud クレームは常に実際に動いているLIFFのチャンネルIDになる。
         const idToken = liff.getIDToken();
         if (!idToken) return;
 
@@ -53,7 +54,6 @@ export function AccountMismatchGuard({
           window.location.reload();
         }
       } catch {
-        // init 失敗 = 別チャンネルのLIFF内の可能性が高い → セッションクリア
         await fetch("/api/auth", { method: "DELETE" });
         window.location.reload();
       }
