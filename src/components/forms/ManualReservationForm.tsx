@@ -6,6 +6,7 @@ import { useState } from "react";
 import { CaptainReservationCreateSchema, type CaptainReservationCreate } from "@/lib/schemas";
 import { FormField, Input, Select, Textarea } from "@/components/ui/FormField";
 import { Button } from "@/components/ui/Button";
+import { formatDateWithDay } from "@/lib/repositories/utils";
 
 interface Trip {
   id: string;
@@ -125,7 +126,7 @@ export function ManualReservationForm({ trips, onCreated }: ManualReservationFor
           <option value="">— 便を選択してください —</option>
           {trips.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.trip_date}
+              {formatDateWithDay(t.trip_date)}
               {t.departure_time ? ` ${t.departure_time.slice(0, 5)}〜` : ""}
               {t.boat_name ? ` ${t.boat_name}` : ""}
               {t.target_species ? ` / ${t.target_species}` : ""}

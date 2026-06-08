@@ -56,6 +56,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { onConflict: "trip_id" }
       );
 
+    // image_urls を duty_logs にも保存（更新）
+    if (image_urls && image_urls.length > 0) {
+      await supabase
+        .from("duty_logs")
+        .update({ image_urls, updated_at: new Date().toISOString() })
+        .eq("trip_id", trip_id)
+        .eq("account_id", session.accountId);
+    }
+
     // message_logs に保存
     const messages = buildFishingReportMessage({
       boatName: (() => { const b = trip.boats as unknown as { name: string } | { name: string }[] | null; return (Array.isArray(b) ? b[0]?.name : b?.name) ?? "—"; })(),
@@ -71,6 +80,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       message_type: "fishing_report",
       title: `釣果情報 ${trip.trip_date}`,
       body: catch_summary,
+      image_urls: image_urls ?? [],
       sent_at: new Date().toISOString(),
     });
 

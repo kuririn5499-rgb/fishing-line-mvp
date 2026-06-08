@@ -40,7 +40,7 @@ export default function CaptainCouponsPage() {
     const res = await fetch("/api/captain/coupons");
     if (res.ok) {
       const json = await res.json();
-      setCoupons(json.coupons ?? []);
+      setCoupons((json.coupons ?? []).filter((c: Coupon) => c.is_active));
     }
     setLoading(false);
   };

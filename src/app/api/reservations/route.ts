@@ -12,7 +12,7 @@ import {
   createReservation,
 } from "@/lib/repositories/reservations";
 import { createServerSupabaseClient } from "@/lib/supabase";
-import { appendReservationToSheet } from "@/lib/google-sheets";
+import { appendReservationToSheet, resolveSheetsCreds } from "@/lib/google-sheets";
 import { syncTripCalendarCounts } from "@/lib/calendar-sync";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -64,6 +64,59 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const supabase = createServerSupabaseClient();
+
+    // 定員チェック
+    const { data: tripForCapacity } = await supabase
+      .from("trips")
+      .select("capacity")
+      .eq("id", parsed.data.trip_id)
+      .eq("account_id", session.accountId)
+      .maybeSingle();
+
+    if (!tripForCapacity) {
+      return NextResponse.json({ error: "便が見つかりません" }, { status: 404 });
+    }
+
+    const isWaitlist = parsed.data.waitlist === true;
+
+    if (tripForCapacity.capacity !== null && tripForCapacity.capacity > 0) {
+      const { data: currentReservations } = await supabase
+        .from("reservations")
+        .select("passengers_count, status")
+        .eq("trip_id", parsed.data.trip_id)
+        .not("status", "in", '("cancelled","waitlist")');
+
+      const currentTotal = (currentReservations ?? []).reduce(
+        (sum, r) => sum + (r.passengers_count ?? 0),
+        0
+      );
+      const remaining = tripForCapacity.capacity - currentTotal;
+
+      if (isWaitlist) {
+        // キャンセル待ち：満員のときのみ登録可能
+        if (remaining > 0) {
+          return NextResponse.json(
+            { error: "この便はまだ空席があります。通常の予約をご利用ください。" },
+            { status: 400 }
+          );
+        }
+      } else {
+        // 通常予約：空席チェック
+        if (currentTotal + parsed.data.passengers_count > tripForCapacity.capacity) {
+          const msg =
+            remaining <= 0
+              ? "この便は満員です。キャンセル待ちをご利用ください。"
+              : `残り定員は${remaining}名です。${parsed.data.passengers_count}名での予約はできません。`;
+          return NextResponse.json({ error: msg }, { status: 400 });
+        }
+      }
+    } else if (isWaitlist) {
+      return NextResponse.json(
+        { error: "この便はキャンセル待ち対象外です。" },
+        { status: 400 }
+      );
+    }
+
     const { data: customer } = await supabase
       .from("customers")
       .select("id")
@@ -74,13 +127,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "顧客情報が見つかりません" }, { status: 404 });
     }
 
-    // 入力された本名で顧客レコードを更新
-    if (parsed.data.customer_name) {
-      await supabase
-        .from("customers")
-        .update({ full_name: parsed.data.customer_name, updated_at: new Date().toISOString() })
-        .eq("id", customer.id);
-    }
+    // 本名・電話番号で顧客レコードを更新
+    await supabase
+      .from("customers")
+      .update({
+        ...(parsed.data.customer_name ? { full_name: parsed.data.customer_name } : {}),
+        ...(parsed.data.customer_phone ? { phone: parsed.data.customer_phone } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", customer.id);
 
     // クーポン検証・割引額計算
     let couponId: string | undefined;
@@ -110,8 +165,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const reservation = await createReservation(session.accountId, customer.id, {
       ...parsed.data,
-      coupon_id: couponId,
-      discount_amount: discountAmount,
+      coupon_id: isWaitlist ? undefined : couponId,
+      discount_amount: isWaitlist ? undefined : discountAmount,
+      status: isWaitlist ? "waitlist" : "pending",
     });
 
     // クーポンを使用済みにする
@@ -125,30 +181,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Google Sheets & カレンダーに予約を同期
     try {
       const supabase = createServerSupabaseClient();
-      const { data: trip } = await supabase
-        .from("trips")
-        .select("trip_date, departure_time, return_time, target_species, capacity, gcal_event_id")
-        .eq("id", parsed.data.trip_id)
-        .maybeSingle();
-
-      const { data: cust } = await supabase
-        .from("customers")
-        .select("full_name")
-        .eq("id", customer.id)
-        .maybeSingle();
+      const [{ data: trip }, { data: cust }, { data: acct }] = await Promise.all([
+        supabase
+          .from("trips")
+          .select("trip_date, departure_time, return_time, target_species, capacity, gcal_event_id")
+          .eq("id", parsed.data.trip_id)
+          .maybeSingle(),
+        supabase.from("customers").select("full_name").eq("id", customer.id).maybeSingle(),
+        supabase
+          .from("accounts")
+          .select("google_spreadsheet_id, google_service_account_email, google_service_account_private_key")
+          .eq("id", session.accountId)
+          .maybeSingle(),
+      ]);
 
       if (trip) {
-        // Sheets 同期
-        await appendReservationToSheet(
-          trip.trip_date,
-          reservation.reservation_code,
-          parsed.data.trip_id,
-          cust?.full_name ?? session.displayName ?? "",
-          parsed.data.passengers_count,
-          reservation.status,
-          parsed.data.memo ?? null,
-          reservation.created_at
-        );
+        const sheetsCreds = resolveSheetsCreds(acct);
+        if (sheetsCreds) {
+          await appendReservationToSheet(
+            trip.trip_date,
+            reservation.reservation_code,
+            parsed.data.trip_id,
+            cust?.full_name ?? session.displayName ?? "",
+            parsed.data.customer_phone ?? "",
+            parsed.data.passengers_count,
+            reservation.status,
+            parsed.data.memo ?? null,
+            reservation.created_at,
+            sheetsCreds
+          );
+        }
 
         // カレンダー更新（gcal_event_id がなければ新規作成も行う）
         await syncTripCalendarCounts(parsed.data.trip_id, supabase, session.accountId);

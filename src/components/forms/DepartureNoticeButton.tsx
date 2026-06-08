@@ -1,7 +1,7 @@
 /**
  * 出船判断ボタン
- * 便管理画面の各便カードに表示する
- * 出船 or 中止を選んで予約者全員にLINE通知を送る
+ * 送信前: 「出船判断を送信」ボタン
+ * 送信後: 「送信済み（出船 or 中止）」＋「再送信」ボタン
  */
 
 "use client";
@@ -15,6 +15,8 @@ interface DepartureNoticeButtonProps {
   tripDate: string;
   departureTime?: string | null;
   targetSpecies?: string | null;
+  initialJudgement?: "go" | "cancel" | null;
+  initialCancelReason?: string | null;
 }
 
 export function DepartureNoticeButton({
@@ -22,15 +24,26 @@ export function DepartureNoticeButton({
   tripDate,
   departureTime,
   targetSpecies,
+  initialJudgement = null,
+  initialCancelReason = null,
 }: DepartureNoticeButtonProps) {
   const [open, setOpen] = useState(false);
   const [judgement, setJudgement] = useState<"go" | "cancel">("go");
   const [cancelReason, setCancelReason] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sentJudgement, setSentJudgement] = useState<"go" | "cancel" | null>(initialJudgement);
+  const [sentCancelReason, setSentCancelReason] = useState<string | null>(initialCancelReason);
   const { toast, show, hide } = useToast();
 
   const timeStr = departureTime ? departureTime.slice(0, 5) : "";
   const label = `${tripDate}${timeStr ? ` ${timeStr}` : ""}${targetSpecies ? ` ${targetSpecies}` : ""}`;
+
+  function openModal() {
+    // 再送信時は前回の内容を初期値にセット
+    setJudgement(sentJudgement ?? "go");
+    setCancelReason(sentCancelReason ?? "");
+    setOpen(true);
+  }
 
   async function send() {
     setLoading(true);
@@ -45,6 +58,8 @@ export function DepartureNoticeButton({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "送信に失敗しました");
+      setSentJudgement(judgement);
+      setSentCancelReason(judgement === "cancel" ? cancelReason : null);
       show(`通知を送信しました（${json.sentCount}名）`, "success");
       setOpen(false);
     } catch (err) {
@@ -56,18 +71,47 @@ export function DepartureNoticeButton({
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="text-xs px-3 py-1.5 rounded-lg border border-blue-300 text-blue-600 hover:bg-blue-50 transition"
-      >
-        出船判断を送信
-      </button>
+      {sentJudgement ? (
+        /* 送信済み表示 */
+        <div className="flex items-center gap-2 flex-wrap">
+          <span
+            className={`text-xs font-semibold px-3 py-1.5 rounded-lg border ${
+              sentJudgement === "go"
+                ? "bg-green-50 border-green-300 text-green-700"
+                : "bg-red-50 border-red-300 text-red-700"
+            }`}
+          >
+            {sentJudgement === "go" ? "🚢 出船通知済み" : "❌ 中止通知済み"}
+          </span>
+          <button
+            onClick={openModal}
+            className="text-xs px-2 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition"
+          >
+            再送信
+          </button>
+        </div>
+      ) : (
+        /* 未送信 */
+        <button
+          onClick={openModal}
+          className="text-xs px-3 py-1.5 rounded-lg border border-blue-300 text-blue-600 hover:bg-blue-50 transition"
+        >
+          出船判断を送信
+        </button>
+      )}
 
       {/* モーダル */}
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-end justify-center z-50 px-4 pb-6">
           <div className="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4">
-            <h2 className="font-bold text-gray-800">出船判断を通知</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-gray-800">出船判断を通知</h2>
+              {sentJudgement && (
+                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                  再送信
+                </span>
+              )}
+            </div>
             <p className="text-sm text-gray-500">{label}</p>
 
             {/* 出船 / 中止 切り替え */}

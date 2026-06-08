@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { TripCreateSchema } from "@/lib/schemas";
 import { updateTrip, getTripById } from "@/lib/repositories/trips";
-import { updateTripEventDetails, resolveCredentials } from "@/lib/google-calendar";
+import { updateTripEventDetails, deleteTripEvent, resolveCredentials } from "@/lib/google-calendar";
 import { createServerSupabaseClient } from "@/lib/supabase";
 
 export async function PATCH(
@@ -69,6 +69,58 @@ export async function PATCH(
     }
 
     return NextResponse.json({ trip });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "エラー";
+    const status = msg === "UNAUTHORIZED" ? 401 : msg === "FORBIDDEN" ? 403 : 500;
+    return NextResponse.json({ error: msg }, { status });
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  try {
+    const session = await requireSession("captain");
+    const { id } = await params;
+    const supabase = createServerSupabaseClient();
+
+    const trip = await getTripById(id, session.accountId);
+    if (!trip) return NextResponse.json({ error: "便が見つかりません" }, { status: 404 });
+
+    // キャンセル済み以外の予約が残っていたら削除不可
+    const { count } = await supabase
+      .from("reservations")
+      .select("id", { count: "exact", head: true })
+      .eq("trip_id", id)
+      .neq("status", "cancelled");
+    if ((count ?? 0) > 0) {
+      return NextResponse.json({ error: "有効な予約が残っています。先にキャンセルしてください。" }, { status: 400 });
+    }
+
+    // カレンダーイベントを削除
+    if (trip.gcal_event_id) {
+      const { data: account } = await supabase
+        .from("accounts")
+        .select("google_calendar_id, google_service_account_email, google_service_account_private_key")
+        .eq("id", session.accountId)
+        .maybeSingle();
+      const creds = resolveCredentials(account);
+      if (creds) {
+        await deleteTripEvent(trip.gcal_event_id, creds).catch((e) =>
+          console.error("[trips/DELETE] カレンダー削除失敗:", e)
+        );
+      }
+    }
+
+    const { error } = await supabase
+      .from("trips")
+      .delete()
+      .eq("id", id)
+      .eq("account_id", session.accountId);
+    if (error) throw new Error(`削除エラー: ${error.message}`);
+
+    return NextResponse.json({ ok: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "エラー";
     const status = msg === "UNAUTHORIZED" ? 401 : msg === "FORBIDDEN" ? 403 : 500;

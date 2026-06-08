@@ -11,15 +11,26 @@ import {
   getDutyLogByTrip,
   updateDutyLogSheetRow,
 } from "@/lib/repositories/duty-logs";
-import { appendDutyLogToSheet } from "@/lib/google-sheets";
+import { appendDutyLogToSheet, resolveSheetsCreds } from "@/lib/google-sheets";
 import { createServerSupabaseClient } from "@/lib/supabase";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    await requireSession("captain");
+    const session = await requireSession("captain");
     const tripId = req.nextUrl.searchParams.get("trip_id");
     if (!tripId) {
       return NextResponse.json({ error: "trip_id は必須です" }, { status: 400 });
+    }
+    // 自アカウントの便であることを確認
+    const supabase = createServerSupabaseClient();
+    const { data: tripOwner } = await supabase
+      .from("trips")
+      .select("id")
+      .eq("id", tripId)
+      .eq("account_id", session.accountId)
+      .maybeSingle();
+    if (!tripOwner) {
+      return NextResponse.json({ error: "便が見つかりません" }, { status: 404 });
     }
     const log = await getDutyLogByTrip(tripId);
     return NextResponse.json({ log });
@@ -48,22 +59,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Google Sheets にミラー保存
     try {
       const supabase = createServerSupabaseClient();
-      const { data: trip } = await supabase
-        .from("trips")
-        .select("trip_date, boats(name)")
-        .eq("id", parsed.data.trip_id)
-        .maybeSingle();
+      const [{ data: trip }, { data: acct }] = await Promise.all([
+        supabase
+          .from("trips")
+          .select("trip_date, boats(name)")
+          .eq("id", parsed.data.trip_id)
+          .maybeSingle(),
+        supabase
+          .from("accounts")
+          .select("google_spreadsheet_id, google_service_account_email, google_service_account_private_key")
+          .eq("id", session.accountId)
+          .maybeSingle(),
+      ]);
 
       if (trip) {
         const boatsData = trip.boats as unknown as { name: string } | { name: string }[] | null;
         const boatName = (Array.isArray(boatsData) ? boatsData[0]?.name : boatsData?.name) ?? "不明";
-        const rowNumber = await appendDutyLogToSheet(
-          log,
-          trip.trip_date,
-          boatName
-        );
-        if (rowNumber > 0) {
-          await updateDutyLogSheetRow(log.id, rowNumber);
+        const sheetsCreds = resolveSheetsCreds(acct);
+        if (sheetsCreds) {
+          const rowNumber = await appendDutyLogToSheet(log, trip.trip_date, boatName, sheetsCreds);
+          if (rowNumber > 0) {
+            await updateDutyLogSheetRow(log.id, rowNumber);
+          }
         }
       }
     } catch (sheetsErr) {

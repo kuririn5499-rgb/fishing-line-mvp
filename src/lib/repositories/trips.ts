@@ -65,7 +65,7 @@ export async function createTrip(
       account_id: accountId,
       created_by: createdBy,
       ...input,
-      status: "open",
+      status: input.status ?? "open",
       departure_time: input.departure_time || null,
       return_time: input.return_time || null,
       price_per_person: input.price_per_person ?? null,

@@ -27,13 +27,14 @@ export async function PATCH(
     // 自アカウントのクーポンか確認しながら更新
     const { data: coupon, error } = await supabase
       .from("coupons")
-      .update({ is_active, updated_at: new Date().toISOString() })
+      .update({ is_active })
       .eq("id", id)
       .eq("account_id", session.accountId)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error || !coupon) {
+    if (error) throw new Error(error.message);
+    if (!coupon) {
       return NextResponse.json({ error: "クーポンが見つかりません" }, { status: 404 });
     }
 

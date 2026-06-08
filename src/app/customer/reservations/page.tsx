@@ -7,8 +7,10 @@ import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
 import { ReservationStatusBadge } from "@/components/ui/StatusBadge";
 import { ReservationForm, type TripCoupon } from "@/components/forms/ReservationForm";
-import { formatPrice, todayJST } from "@/lib/repositories/utils";
+import { formatPrice, todayJST, formatDateWithDay } from "@/lib/repositories/utils";
 import { isCouponValidForDate } from "@/lib/coupon-utils";
+import { ReservationCancelButton } from "@/components/forms/ReservationCancelButton";
+import { WaitlistButton } from "@/components/forms/WaitlistButton";
 import type { Reservation, Trip, Coupon } from "@/types";
 
 type ReservationWithTrip = Reservation & {
@@ -16,7 +18,7 @@ type ReservationWithTrip = Reservation & {
 };
 
 interface PageProps {
-  searchParams?: { trip_id?: string };
+  searchParams?: Promise<{ trip_id?: string }>;
 }
 
 export default async function CustomerReservationsPage({ searchParams }: PageProps) {
@@ -25,7 +27,8 @@ export default async function CustomerReservationsPage({ searchParams }: PagePro
 
   const supabase = createServerSupabaseClient();
   const today = todayJST();
-  const defaultTripId = searchParams?.trip_id;
+  const params = await searchParams;
+  const defaultTripId = params?.trip_id;
 
   // 自分の customer レコード
   const { data: customer } = await supabase
@@ -45,15 +48,47 @@ export default async function CustomerReservationsPage({ searchParams }: PagePro
         .limit(30)
     : { data: [] };
 
-  // 受付中の便一覧（新規予約フォーム用）
-  const { data: openTrips } = await supabase
+  // 受付中の便一覧（定員・予約数込み）
+  const { data: openTripsRaw } = await supabase
     .from("trips")
-    .select("id, trip_date, departure_time, target_species, capacity, price_per_person, boats(name)")
+    .select("id, trip_date, departure_time, target_species, capacity, price_per_person, boats(name), reservations(passengers_count, status)")
     .eq("account_id", session.accountId)
     .gte("trip_date", today)
     .in("status", ["open"])
     .order("trip_date", { ascending: true })
     .limit(20);
+
+  // 満員かどうかを判定して分類
+  type OpenTripRaw = typeof openTripsRaw extends (infer T)[] | null ? T : never;
+  const tripsWithAvail = (openTripsRaw ?? []).map((trip: OpenTripRaw) => {
+    const rsvs = (trip.reservations ?? []) as { passengers_count: number; status: string }[];
+    const reserved = rsvs
+      .filter((r) => !["cancelled", "waitlist"].includes(r.status))
+      .reduce((sum, r) => sum + (r.passengers_count ?? 0), 0);
+    const available = trip.capacity != null ? trip.capacity - reserved : null;
+    return { ...trip, available };
+  });
+  const openTrips = tripsWithAvail.filter((t) => t.available === null || t.available > 0);
+  const fullTrips = tripsWithAvail.filter((t) => t.available !== null && t.available <= 0);
+
+  // 自分がすでにキャンセル待ちしている trip_id
+  const { data: myWaitlist } = customer
+    ? await supabase
+        .from("reservations")
+        .select("trip_id")
+        .eq("customer_id", customer.id)
+        .eq("status", "waitlist")
+    : { data: [] };
+  const myWaitlistTripIds = new Set((myWaitlist ?? []).map((r) => r.trip_id));
+
+  // アカウント設定（顧客キャンセル機能フラグ）
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("feature_customer_cancel")
+    .eq("id", session.accountId)
+    .maybeSingle();
+
+  const featureCustomerCancel = account?.feature_customer_cancel ?? true;
 
   // ユーザーの有効クーポンを取得
   const { data: userCouponsRaw } = await supabase
@@ -64,7 +99,7 @@ export default async function CustomerReservationsPage({ searchParams }: PagePro
 
   // 各便にクーポンを適用できるか計算
   const couponMap: Record<string, TripCoupon> = {};
-  for (const trip of openTrips ?? []) {
+  for (const trip of openTrips) {
     if (trip.price_per_person == null) continue;
     for (const uc of userCouponsRaw ?? []) {
       const c = uc.coupons as unknown as Coupon & { id: string } | null;
@@ -86,7 +121,7 @@ export default async function CustomerReservationsPage({ searchParams }: PagePro
       <h1 className="text-lg font-bold text-gray-800">予約管理</h1>
 
       {/* 新規予約フォーム */}
-      {openTrips && openTrips.length > 0 && (
+      {openTrips.length > 0 && (
         <section>
           <h2 className="text-sm font-bold text-gray-600 mb-2">新しく予約する</h2>
           <ReservationForm
@@ -94,6 +129,52 @@ export default async function CustomerReservationsPage({ searchParams }: PagePro
             defaultTripId={defaultTripId}
             couponMap={couponMap}
           />
+        </section>
+      )}
+
+      {/* 満員便のキャンセル待ち */}
+      {fullTrips.length > 0 && (
+        <section>
+          <h2 className="text-sm font-bold text-gray-600 mb-2">満員の便（キャンセル待ち）</h2>
+          <div className="space-y-3">
+            {fullTrips.map((trip) => {
+              const boats = trip.boats as { name: string } | { name: string }[] | null;
+              const boatName = (Array.isArray(boats) ? boats[0]?.name : boats?.name) ?? "—";
+              const alreadyWaiting = myWaitlistTripIds.has(trip.id);
+              return (
+                <Card key={trip.id}>
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {trip.trip_date}
+                          {trip.departure_time ? ` ${trip.departure_time.slice(0, 5)}〜` : ""}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {boatName} / {trip.target_species ?? "—"}
+                        </p>
+                        {trip.price_per_person != null && (
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            {formatPrice(trip.price_per_person)}/名
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-500 shrink-0">
+                        満員
+                      </span>
+                    </div>
+                    {alreadyWaiting ? (
+                      <p className="text-xs text-orange-500 font-medium">
+                        ⏳ キャンセル待ち登録済み
+                      </p>
+                    ) : (
+                      <WaitlistButton tripId={trip.id} />
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
         </section>
       )}
 
@@ -113,8 +194,8 @@ export default async function CustomerReservationsPage({ searchParams }: PagePro
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="font-semibold text-sm">
-                        {r.trips?.trip_date ?? "—"}
-                        {r.trips?.departure_time ? ` ${r.trips.departure_time}〜` : ""}
+                        {r.trips?.trip_date ? formatDateWithDay(r.trips.trip_date) : "—"}
+                        {r.trips?.departure_time ? ` ${r.trips.departure_time.slice(0, 5)}〜` : ""}
                       </p>
                       <p className="text-xs text-gray-500 mt-0.5">
                         {r.trips?.target_species ?? "—"}
@@ -147,13 +228,24 @@ export default async function CustomerReservationsPage({ searchParams }: PagePro
                         予約コード: {r.reservation_code}
                       </p>
                     </div>
-                    {r.trips?.trip_date && r.trips.trip_date < today ? (
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                        終了
-                      </span>
-                    ) : (
-                      <ReservationStatusBadge status={r.status} />
-                    )}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      {r.trips?.trip_date && r.trips.trip_date < today ? (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                          終了
+                        </span>
+                      ) : (
+                        <ReservationStatusBadge status={r.status} />
+                      )}
+                      {featureCustomerCancel &&
+                        r.trips?.trip_date &&
+                        r.trips.trip_date >= today &&
+                        r.status !== "cancelled" && (
+                          <ReservationCancelButton
+                            reservationId={r.id}
+                            tripDate={r.trips.trip_date}
+                          />
+                        )}
+                    </div>
                   </div>
                 </Card>
               ))}

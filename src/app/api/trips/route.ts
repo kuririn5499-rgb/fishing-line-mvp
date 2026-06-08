@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { TripCreateSchema } from "@/lib/schemas";
 import { getTripsByAccount, createTrip, getTripsByDate, setTripGcalEventId } from "@/lib/repositories/trips";
-import { createTripEvent, resolveCredentials } from "@/lib/google-calendar";
+import { createTripEvent, createClosedDayEvent, resolveCredentials } from "@/lib/google-calendar";
 import { createServerSupabaseClient } from "@/lib/supabase";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -42,18 +42,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const trip = await createTrip(session.accountId, session.userId, parsed.data);
 
-    // Google カレンダーに出船予定を登録（失敗してもトリップ作成は成功扱い）
-    if (trip.departure_time && trip.return_time) {
-      try {
-        const supabase = createServerSupabaseClient();
-        const { data: account } = await supabase
-          .from("accounts")
-          .select("google_calendar_id, google_service_account_email, google_service_account_private_key")
-          .eq("id", session.accountId)
-          .maybeSingle();
+    // Google カレンダーに同期（失敗してもトリップ作成は成功扱い）
+    try {
+      const supabase = createServerSupabaseClient();
+      const { data: account } = await supabase
+        .from("accounts")
+        .select("google_calendar_id, google_service_account_email, google_service_account_private_key")
+        .eq("id", session.accountId)
+        .maybeSingle();
+      const creds = resolveCredentials(account);
 
-        const creds = resolveCredentials(account);
-        if (creds) {
+      if (creds) {
+        if (trip.status === "closed") {
+          const gcalEventId = await createClosedDayEvent(trip.id, trip.trip_date, creds);
+          await setTripGcalEventId(trip.id, gcalEventId);
+          trip.gcal_event_id = gcalEventId;
+        } else if (trip.departure_time && trip.return_time) {
           const gcalEventId = await createTripEvent({
             tripId: trip.id,
             tripDate: trip.trip_date,
@@ -67,9 +71,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           await setTripGcalEventId(trip.id, gcalEventId);
           trip.gcal_event_id = gcalEventId;
         }
-      } catch (calErr) {
-        console.error("[trips/POST] Google Calendar 登録失敗:", calErr);
       }
+    } catch (calErr) {
+      console.error("[trips/POST] Google Calendar 登録失敗:", calErr);
     }
 
     return NextResponse.json({ trip }, { status: 201 });

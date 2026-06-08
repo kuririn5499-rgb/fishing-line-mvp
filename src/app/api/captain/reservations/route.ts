@@ -9,7 +9,7 @@ import { requireSession } from "@/lib/auth";
 import { CaptainReservationCreateSchema } from "@/lib/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { nanoid } from "@/lib/repositories/utils";
-import { appendReservationToSheet } from "@/lib/google-sheets";
+import { appendReservationToSheet, resolveSheetsCreds } from "@/lib/google-sheets";
 import { syncTripCalendarCounts } from "@/lib/calendar-sync";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -28,16 +28,39 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const { trip_id, customer_name, customer_phone, passengers_count, memo, status } = parsed.data;
     const supabase = createServerSupabaseClient();
 
-    // 便の存在確認
+    // 便の存在確認 + 定員取得
     const { data: trip, error: tripErr } = await supabase
       .from("trips")
-      .select("id, trip_date, status")
+      .select("id, trip_date, status, capacity")
       .eq("id", trip_id)
       .eq("account_id", session.accountId)
       .maybeSingle();
 
     if (tripErr || !trip) {
       return NextResponse.json({ error: "便が見つかりません" }, { status: 404 });
+    }
+
+    // 定員チェック
+    if (trip.capacity !== null && trip.capacity > 0) {
+      const { data: currentReservations } = await supabase
+        .from("reservations")
+        .select("passengers_count")
+        .eq("trip_id", trip_id)
+        .neq("status", "cancelled");
+
+      const currentTotal = (currentReservations ?? []).reduce(
+        (sum, r) => sum + (r.passengers_count ?? 0),
+        0
+      );
+
+      if (currentTotal + passengers_count > trip.capacity) {
+        const remaining = trip.capacity - currentTotal;
+        const msg =
+          remaining <= 0
+            ? "この便は満員です。"
+            : `残り定員は${remaining}名です。${passengers_count}名での予約はできません。`;
+        return NextResponse.json({ error: msg }, { status: 400 });
+      }
     }
 
     // 電話番号で既存顧客を検索、なければ新規作成
@@ -111,16 +134,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // Google Sheets 同期
     try {
-      await appendReservationToSheet(
-        trip.trip_date,
-        reservation.reservation_code,
-        trip_id,
-        customer_name,
-        passengers_count,
-        status,
-        memo ?? null,
-        reservation.created_at
-      );
+      const { data: acct } = await supabase
+        .from("accounts")
+        .select("google_spreadsheet_id, google_service_account_email, google_service_account_private_key")
+        .eq("id", session.accountId)
+        .maybeSingle();
+
+      const sheetsCreds = resolveSheetsCreds(acct);
+      if (sheetsCreds) {
+        await appendReservationToSheet(
+          trip.trip_date,
+          reservation.reservation_code,
+          trip_id,
+          customer_name,
+          customer_phone ?? "",
+          passengers_count,
+          status,
+          memo ?? null,
+          reservation.created_at,
+          sheetsCreds
+        );
+      }
     } catch (sheetsErr) {
       console.error("[captain/reservations] Sheets同期エラー:", sheetsErr);
     }

@@ -97,6 +97,110 @@ export function buildFishingReportMessage(params: {
   return messages;
 }
 
+/** お知らせメッセージを生成する（テキスト1件 + 画像最大2枚） */
+export function buildAnnouncementMessage(params: {
+  content: string;
+  imageUrls?: string[];
+}): LineMessage[] {
+  const { content, imageUrls } = params;
+  const messages: LineMessage[] = [];
+  messages.push({ type: "text", text: `📢 お知らせ\n\n${content}` });
+  for (const url of (imageUrls ?? []).slice(0, 2)) {
+    messages.push({ type: "image", originalContentUrl: url, previewImageUrl: url });
+  }
+  return messages;
+}
+
+/** 出船リマインダーメッセージを生成する */
+export function buildReminderMessage(params: {
+  boatName: string;
+  tripDate: string;
+  departureTime: string | null;
+  targetSpecies: string | null;
+  liffUrl: string;
+}): LineMessage[] {
+  const { boatName, tripDate, departureTime, targetSpecies, liffUrl } = params;
+  const [, m, d] = tripDate.split("-").map(Number);
+  const days = ["日", "月", "火", "水", "木", "金", "土"];
+  const dayLabel = days[new Date(tripDate).getDay()];
+  const dateStr = `${m}/${d}（${dayLabel}）`;
+
+  let text = `【${boatName}】\n明日（${dateStr}）の出船リマインダーです🚢\n`;
+  if (departureTime) text += `\n🕐 出発: ${departureTime.slice(0, 5)}`;
+  if (targetSpecies) text += `\n🎣 釣り物: ${targetSpecies}`;
+  text += `\n\n出発の30分前にはご集合ください。`;
+  if (liffUrl) text += `\n\n乗船名簿の提出はこちら👇\n${liffUrl}`;
+
+  return [{ type: "text", text }];
+}
+
+/** 予約キャンセル通知メッセージを生成する（船長向け） */
+export function buildCancellationNoticeMessage(params: {
+  boatName: string;
+  tripDate: string;
+  targetSpecies: string | null;
+  customerName: string | null;
+  passengersCount: number;
+}): LineMessage[] {
+  const { boatName, tripDate, targetSpecies, customerName, passengersCount } = params;
+  const [, m, d] = tripDate.split("-").map(Number);
+  const days = ["日", "月", "火", "水", "木", "金", "土"];
+  const dayLabel = days[new Date(tripDate).getDay()];
+  const dateStr = `${m}/${d}（${dayLabel}）`;
+  const text =
+    `【${boatName}】キャンセル通知\n\n` +
+    `📅 ${dateStr}${targetSpecies ? ` / ${targetSpecies}` : ""}\n` +
+    `👤 ${customerName ?? "お客様"}（${passengersCount}名）がキャンセルしました。`;
+  return [{ type: "text", text }];
+}
+
+/** 便リクエスト承認通知メッセージを生成する */
+export function buildRequestApprovedMessage(params: {
+  boatName: string;
+  requestedDate: string;
+  targetSpecies: string | null;
+  departureTime: string | null;
+  returnTime: string | null;
+  capacity: number | null;
+  liffUrl: string;
+}): LineMessage[] {
+  const { boatName, requestedDate, targetSpecies, departureTime, returnTime, capacity, liffUrl } = params;
+  const [y, m, d] = requestedDate.split("-").map(Number);
+  const days = ["日", "月", "火", "水", "木", "金", "土"];
+  const dayLabel = days[new Date(y, m - 1, d).getDay()];
+  const dateStr = `${m}/${d}（${dayLabel}）`;
+  const timeStr = departureTime && returnTime ? `\n⏰ ${departureTime}〜${returnTime}` : "";
+  const capacityStr = capacity ? `\n👥 定員 ${capacity}名` : "";
+
+  const text =
+    `【${boatName}】便リクエストが承認されました！\n\n` +
+    `📅 ${dateStr}\n` +
+    `🎣 ${targetSpecies ?? "釣り"}` +
+    timeStr +
+    capacityStr +
+    `\n\nご予約はこちらからお願いします👇\n${liffUrl}`;
+
+  return [{ type: "text", text }];
+}
+
+/** キャンセル待ち繰り上がり通知（顧客向け） */
+export function buildWaitlistPromotedMessage(params: {
+  boatName: string;
+  tripDate: string;
+  departureTime: string | null;
+  targetSpecies: string | null;
+}): LineMessage[] {
+  const { boatName, tripDate, departureTime, targetSpecies } = params;
+  const timeStr = departureTime ? ` ${departureTime.slice(0, 5)}出船` : "";
+  const speciesStr = targetSpecies ? ` / ${targetSpecies}` : "";
+  return [
+    {
+      type: "text",
+      text: `【${boatName}】🎉 キャンセル待ちが繰り上がりました！\n\n📅 ${tripDate}${timeStr}${speciesStr}\n\nご予約が確定しましたので、当日はよろしくお願いします！`,
+    },
+  ];
+}
+
 // =====================
 // 型定義
 // =====================

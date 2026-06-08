@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { TripStatusUpdateSchema } from "@/lib/schemas";
 import { updateTripStatus, getTripById, setTripGcalEventId } from "@/lib/repositories/trips";
-import { createTripEvent, deleteTripEvent, resolveCredentials } from "@/lib/google-calendar";
+import { createTripEvent, createClosedDayEvent, deleteTripEvent, resolveCredentials } from "@/lib/google-calendar";
 import { createServerSupabaseClient } from "@/lib/supabase";
 
 export async function PATCH(
@@ -49,7 +49,8 @@ export async function PATCH(
       .maybeSingle();
     const creds = resolveCredentials(account);
 
-    if (newStatus === "cancelled") {
+    if (newStatus === "cancelled" || newStatus === "closed") {
+      // 予約を一括キャンセル
       await supabase
         .from("reservations")
         .update({ status: "cancelled", updated_at: new Date().toISOString() })
@@ -57,6 +58,7 @@ export async function PATCH(
         .eq("account_id", session.accountId)
         .in("status", ["pending", "confirmed", "waitlist"]);
 
+      // 既存カレンダーイベントを削除
       if (trip.gcal_event_id && creds) {
         try {
           await deleteTripEvent(trip.gcal_event_id, creds);
@@ -68,33 +70,56 @@ export async function PATCH(
           console.error("[trips/status] gcal_event_id クリア失敗:", e)
         );
       }
-    } else if (
-      (trip.status === "cancelled" || trip.status === "completed") &&
-      newStatus === "open" &&
-      trip.departure_time &&
-      trip.return_time &&
-      creds
-    ) {
-      try {
-        const { count: reservedCount } = await supabase
-          .from("reservations")
-          .select("id", { count: "exact", head: true })
-          .eq("trip_id", id)
-          .neq("status", "cancelled");
 
-        const gcalEventId = await createTripEvent({
-          tripId: trip.id,
-          tripDate: trip.trip_date,
-          departureTime: trip.departure_time.slice(0, 5),
-          returnTime: trip.return_time.slice(0, 5),
-          targetSpecies: trip.target_species ?? undefined,
-          capacity: trip.capacity ?? undefined,
-          reservedCount: reservedCount ?? 0,
-        }, creds);
-        await setTripGcalEventId(id, gcalEventId);
-      } catch (calErr) {
-        calWarning = calErr instanceof Error ? calErr.message : "カレンダー再作成失敗";
-        console.error("[trips/status] カレンダー再作成失敗:", calErr);
+      // 休船の場合は終日イベントを新規作成
+      if (newStatus === "closed" && creds) {
+        try {
+          const gcalEventId = await createClosedDayEvent(id, trip.trip_date, creds);
+          await setTripGcalEventId(id, gcalEventId);
+        } catch (calErr) {
+          calWarning = calErr instanceof Error ? calErr.message : "カレンダー休船登録失敗";
+          console.error("[trips/status] カレンダー休船登録失敗:", calErr);
+        }
+      }
+    } else if (
+      (trip.status === "cancelled" || trip.status === "completed" || trip.status === "closed") &&
+      newStatus === "open"
+    ) {
+      // 既存イベント（休船終日イベント含む）を削除
+      if (trip.gcal_event_id && creds) {
+        try {
+          await deleteTripEvent(trip.gcal_event_id, creds);
+        } catch (delErr) {
+          console.error("[trips/status] カレンダー削除失敗:", delErr);
+        }
+        await setTripGcalEventId(id, "").catch((e) =>
+          console.error("[trips/status] gcal_event_id クリア失敗:", e)
+        );
+      }
+
+      // 出発・帰港時間があれば通常イベントを再作成
+      if (trip.departure_time && trip.return_time && creds) {
+        try {
+          const { count: reservedCount } = await supabase
+            .from("reservations")
+            .select("id", { count: "exact", head: true })
+            .eq("trip_id", id)
+            .neq("status", "cancelled");
+
+          const gcalEventId = await createTripEvent({
+            tripId: trip.id,
+            tripDate: trip.trip_date,
+            departureTime: trip.departure_time.slice(0, 5),
+            returnTime: trip.return_time.slice(0, 5),
+            targetSpecies: trip.target_species ?? undefined,
+            capacity: trip.capacity ?? undefined,
+            reservedCount: reservedCount ?? 0,
+          }, creds);
+          await setTripGcalEventId(id, gcalEventId);
+        } catch (calErr) {
+          calWarning = calErr instanceof Error ? calErr.message : "カレンダー再作成失敗";
+          console.error("[trips/status] カレンダー再作成失敗:", calErr);
+        }
       }
     }
 

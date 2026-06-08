@@ -56,8 +56,14 @@ export async function GET(req: NextRequest) {
       scopes: ["https://www.googleapis.com/auth/calendar"],
     });
     const calendar = google.calendar({ version: "v3", auth });
-    const res = await calendar.calendarList.get({ calendarId: creds.calendarId });
-    result.calendar_name = res.data.summary;
+    const now = new Date().toISOString();
+    const res = await calendar.events.list({
+      calendarId: creds.calendarId,
+      maxResults: 1,
+      timeMin: now,
+    });
+    result.calendar_name = creds.calendarId;
+    result.events_count = res.data.items?.length ?? 0;
     result.diagnosis = "✅ 接続成功";
   } catch (e) {
     result.api_error = e instanceof Error ? e.message : String(e);

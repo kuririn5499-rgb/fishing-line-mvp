@@ -7,7 +7,8 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import type { Role } from "@/types";
 
 interface AppShellProps {
@@ -17,6 +18,7 @@ interface AppShellProps {
   navType?: "captain" | "customer" | "admin";
   displayName?: string | null;
   pictureUrl?: string | null;
+  showLogout?: boolean;
 }
 
 // =====================
@@ -58,8 +60,24 @@ export function AppShell({
   navType,
   displayName,
   pictureUrl,
+  showLogout = false,
 }: AppShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+
+  const handleLogout = async () => {
+    if (!confirmLogout) {
+      setConfirmLogout(true);
+      setTimeout(() => setConfirmLogout(false), 3000);
+      return;
+    }
+    setLoggingOut(true);
+    await fetch("/api/auth", { method: "DELETE" });
+    router.refresh();
+    window.location.reload();
+  };
   const nav = navType
     ? navType === "captain" ? captainNav
     : navType === "customer" ? customerNav
@@ -73,24 +91,39 @@ export function AppShell({
         <div className="flex items-center gap-2">
           <span className="text-xl">🎣</span>
           <span className="font-bold text-sea-dark text-sm">
-            {title ?? "遊漁船管理"}
+            {title ?? "船ナビ"}
           </span>
         </div>
-        {displayName && (
-          <div className="flex items-center gap-2">
-            {pictureUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={pictureUrl}
-                alt={displayName}
-                className="w-8 h-8 rounded-full object-cover"
-              />
-            )}
-            <span className="text-xs text-gray-600 max-w-[120px] truncate">
-              {displayName}
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {displayName && (
+            <>
+              {pictureUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={pictureUrl}
+                  alt={displayName}
+                  className="w-8 h-8 rounded-full object-cover"
+                />
+              )}
+              <span className="text-xs text-gray-600 max-w-[80px] truncate">
+                {displayName}
+              </span>
+            </>
+          )}
+          {showLogout && (
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className={`text-xs px-2.5 py-1 rounded-lg border transition ml-1 ${
+                confirmLogout
+                  ? "border-red-400 text-red-600 bg-red-50"
+                  : "border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300"
+              }`}
+            >
+              {loggingOut ? "…" : confirmLogout ? "タップで確定" : "ログアウト"}
+            </button>
+          )}
+        </div>
       </header>
 
       {/* メインコンテンツ */}

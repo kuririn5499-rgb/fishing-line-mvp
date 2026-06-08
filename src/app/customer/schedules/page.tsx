@@ -9,7 +9,7 @@ import { getSession } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
 import { TripStatusBadge } from "@/components/ui/StatusBadge";
-import { todayJST, formatPrice } from "@/lib/repositories/utils";
+import { todayJST, formatPrice, formatDateWithDay } from "@/lib/repositories/utils";
 import { isCouponValidForDate } from "@/lib/coupon-utils";
 import type { Trip, Coupon } from "@/types";
 
@@ -106,7 +106,7 @@ export default async function CustomerSchedulesPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <TripStatusBadge status={trip.status} />
-                        <span className="font-semibold text-sm">{trip.trip_date}</span>
+                        <span className="font-semibold text-sm">{formatDateWithDay(trip.trip_date)}</span>
                         {trip.departure_time && (
                           <span className="text-xs text-gray-500">
                             {trip.departure_time.slice(0, 5)}

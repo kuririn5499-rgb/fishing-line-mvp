@@ -126,6 +126,36 @@ export async function deleteTripEvent(eventId: string, creds: GoogleCalendarCred
   await calendar.events.delete({ calendarId: creds.calendarId, eventId });
 }
 
+/** 休船日（終日イベント）を Google カレンダーに登録する */
+export async function createClosedDayEvent(
+  tripId: string,
+  tripDate: string,
+  creds: GoogleCalendarCredentials
+): Promise<string> {
+  const calendar = getCalendarClient(creds);
+
+  // 終日イベントの end は翌日（exclusive）
+  const [y, m, d] = tripDate.split("-").map(Number);
+  const next = new Date(y, m - 1, d + 1);
+  const endDateStr = [
+    next.getFullYear(),
+    String(next.getMonth() + 1).padStart(2, "0"),
+    String(next.getDate()).padStart(2, "0"),
+  ].join("-");
+
+  const res = await calendar.events.insert({
+    calendarId: creds.calendarId,
+    requestBody: {
+      summary: `${formatDateShort(tripDate)} ⚓ 休船`,
+      start: { date: tripDate },
+      end: { date: endDateStr },
+      colorId: "8",
+      extendedProperties: { private: { tripId } },
+    },
+  });
+  return res.data.id ?? "";
+}
+
 export async function listTripEvents(year: number, month: number, creds: GoogleCalendarCredentials) {
   const calendar = getCalendarClient(creds);
   const timeMin = new Date(year, month - 1, 1).toISOString();

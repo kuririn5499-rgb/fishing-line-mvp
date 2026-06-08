@@ -7,8 +7,8 @@ import { getSession } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
 import { TripStatusBadge, ReservationStatusBadge } from "@/components/ui/StatusBadge";
-import { todayJST, formatPrice } from "@/lib/repositories/utils";
-import type { Trip } from "@/types";
+import { todayJST, formatPrice, formatDateWithDay } from "@/lib/repositories/utils";
+import type { Trip, TripRequest } from "@/types";
 
 export default async function CustomerHomePage() {
   const session = await getSession();
@@ -35,8 +35,8 @@ export default async function CustomerHomePage() {
     .eq("user_id", session.userId)
     .maybeSingle();
 
-  // 表示名: customers.full_name → session.displayName → "お客様" の優先順
-  const displayName = customer?.full_name || session.displayName || null;
+  // 表示名: LINE名を優先し、未設定の場合のみ customers.full_name を使用
+  const displayName = session.displayName || customer?.full_name || null;
 
   // 自分の今後の予約（直近20件取得してJSで絞り込み）
   const { data: myReservationsRaw } = customer
@@ -70,6 +70,15 @@ export default async function CustomerHomePage() {
     .sort((a, b) => (a.trip!.trip_date > b.trip!.trip_date ? 1 : -1))
     .slice(0, 5);
 
+  // 自分のリクエスト一覧
+  const { data: myRequests } = await supabase
+    .from("trip_requests")
+    .select("*")
+    .eq("account_id", session.accountId)
+    .eq("user_id", session.userId)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
   // 船名 + フィーチャーフラグ
   const { data: account } = await supabase
     .from("accounts")
@@ -94,11 +103,45 @@ export default async function CustomerHomePage() {
         </h1>
       </div>
 
+      {/* 自分のリクエスト */}
+      {(myRequests ?? []).length > 0 && (
+        <section>
+          <h2 className="text-sm font-bold text-gray-700 mb-2">リクエスト状況</h2>
+          <div className="space-y-2">
+            {(myRequests as TripRequest[]).map((req) => {
+              const stMap: Record<string, { label: string; className: string }> = {
+                pending:  { label: "承認待ち", className: "bg-yellow-100 text-yellow-700" },
+                approved: { label: "承認済み ✅", className: "bg-green-100 text-green-700" },
+                rejected: { label: "お断り",   className: "bg-gray-100 text-gray-500" },
+              };
+              const st = stMap[req.status] ?? stMap.pending;
+              return (
+                <Card key={req.id}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold">{formatDateWithDay(req.requested_date)}</p>
+                      {req.target_species && (
+                        <p className="text-xs text-gray-500">{req.target_species}</p>
+                      )}
+                    </div>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${st.className}`}>
+                      {st.label}
+                    </span>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* クイックアクション */}
       <div className="grid grid-cols-2 gap-3">
         {[
           { href: "/customer/reservations", icon: "📅", label: "予約する" },
+          { href: "/customer/request",      icon: "🙋", label: "便をリクエスト" },
           { href: "/customer/manifest",     icon: "📋", label: "乗船名簿" },
+          { href: "/customer/reports",      icon: "🐟", label: "釣果・お知らせ" },
           ...(featureCoupon ? [{ href: "/customer/coupons", icon: "🎟️", label: "クーポン" }] : []),
         ].map((item) => (
           <Link key={item.href} href={item.href}>
@@ -247,6 +290,12 @@ export default async function CustomerHomePage() {
                 </Link>
               );
             })}
+            <Link
+              href="/customer/schedules"
+              className="flex items-center justify-center gap-1 w-full py-2.5 rounded-xl border border-brand-200 text-brand-600 text-sm font-medium hover:bg-brand-50 transition-colors"
+            >
+              出船情報をすべて見る →
+            </Link>
           </div>
         )}
       </section>

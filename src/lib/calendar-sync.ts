@@ -30,11 +30,17 @@ export async function syncTripCalendarCounts(
   const creds = resolveCredentials(account);
   if (!creds) return; // Google Calendar 未設定なら同期スキップ
 
-  const { count: reservedCount } = await supabase
+  // passengers_count を合計して実際の乗船人数を算出
+  const { data: reservationsData } = await supabase
     .from("reservations")
-    .select("id", { count: "exact", head: true })
+    .select("passengers_count")
     .eq("trip_id", tripId)
     .neq("status", "cancelled");
+
+  const reservedCount = (reservationsData ?? []).reduce(
+    (sum, r) => sum + (r.passengers_count ?? 0),
+    0
+  );
 
   const eventInput = {
     tripId,
@@ -43,7 +49,7 @@ export async function syncTripCalendarCounts(
     returnTime: trip.return_time.slice(0, 5),
     targetSpecies: trip.target_species ?? undefined,
     capacity: trip.capacity ?? undefined,
-    reservedCount: reservedCount ?? 0,
+    reservedCount,
   };
 
   if (trip.gcal_event_id) {

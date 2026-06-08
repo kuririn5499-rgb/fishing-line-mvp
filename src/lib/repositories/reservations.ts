@@ -42,7 +42,7 @@ export async function getReservationsByCustomer(
 export async function createReservation(
   accountId: string,
   customerId: string,
-  input: ReservationCreate & { coupon_id?: string; discount_amount?: number }
+  input: ReservationCreate & { coupon_id?: string; discount_amount?: number; status?: string }
 ): Promise<Reservation> {
   const supabase = createServerSupabaseClient();
 
@@ -67,7 +67,7 @@ export async function createReservation(
       reservation_code: code,
       passengers_count: input.passengers_count,
       memo: input.memo ?? null,
-      status: "pending",
+      status: input.status ?? "pending",
       coupon_id: input.coupon_id ?? null,
       discount_amount: input.discount_amount ?? null,
     })

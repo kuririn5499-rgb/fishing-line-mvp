@@ -10,6 +10,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { TripStatusBadge } from "@/components/ui/StatusBadge";
 import { todayJST } from "@/lib/repositories/utils";
 import { ManualReservationForm } from "@/components/forms/ManualReservationForm";
+import { InstallBanner } from "@/components/captain/InstallBanner";
 
 export default async function CaptainDashboardPage() {
   const session = await getSession();
@@ -17,29 +18,44 @@ export default async function CaptainDashboardPage() {
 
   const supabase = createServerSupabaseClient();
   const today = todayJST();
-
-  // 本日の便
-  const { data: todayTrips } = await supabase
-    .from("trips")
-    .select("*, boats(name), pre_departure_checks(id), duty_logs(id)")
-    .eq("account_id", session.accountId)
-    .eq("trip_date", today)
-    .order("departure_time", { ascending: true });
-
-  const trips = todayTrips ?? [];
-
-  // 手動予約フォーム用：直近〜30日先の便
   const until = new Date();
   until.setDate(until.getDate() + 30);
-  const { data: upcomingTrips } = await supabase
-    .from("trips")
-    .select("id, trip_date, departure_time, target_species, boats(name)")
-    .eq("account_id", session.accountId)
-    .gte("trip_date", today)
-    .lte("trip_date", until.toISOString().slice(0, 10))
-    .not("status", "in", '("cancelled","completed")')
-    .order("trip_date", { ascending: true })
-    .order("departure_time", { ascending: true });
+
+  // アカウント情報 + 本日の便 + 手動予約フォーム用の便 + ポイント申請 pending + リクエスト pending を並列取得
+  const [{ data: accountInfo }, { data: todayTrips }, { data: upcomingTrips }, { count: pendingRedemptions }, { count: pendingRequests }] = await Promise.all([
+    supabase
+      .from("accounts")
+      .select("name, boat_name")
+      .eq("id", session.accountId)
+      .maybeSingle(),
+    supabase
+      .from("trips")
+      .select("*, boats(name), pre_departure_checks(id), duty_logs(id)")
+      .eq("account_id", session.accountId)
+      .eq("trip_date", today)
+      .order("departure_time", { ascending: true }),
+    supabase
+      .from("trips")
+      .select("id, trip_date, departure_time, target_species, boats(name)")
+      .eq("account_id", session.accountId)
+      .gte("trip_date", today)
+      .lte("trip_date", until.toISOString().slice(0, 10))
+      .not("status", "in", '("cancelled","completed")')
+      .order("trip_date", { ascending: true })
+      .order("departure_time", { ascending: true }),
+    supabase
+      .from("point_redemptions")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", session.accountId)
+      .eq("status", "pending"),
+    supabase
+      .from("trip_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", session.accountId)
+      .eq("status", "pending"),
+  ]);
+
+  const trips = todayTrips ?? [];
 
   const tripOptions = (upcomingTrips ?? []).map((t) => {
     const boats = t.boats as unknown as { name: string } | { name: string }[] | null;
@@ -66,30 +82,29 @@ export default async function CaptainDashboardPage() {
       !((t.duty_logs as unknown[])?.length > 0)
   );
 
-  // 今日の総予約数
-  const { count: reservationCount } = await supabase
-    .from("reservations")
-    .select("id", { count: "exact", head: true })
-    .in("trip_id", trips.map((t) => t.id))
-    .neq("status", "cancelled");
+  // 予約IDを1回だけ取得してカウントと名簿検索に共用
+  const tripIdList = trips.map((t) => t.id);
+  const { data: reservationData } = tripIdList.length > 0
+    ? await supabase
+        .from("reservations")
+        .select("id")
+        .in("trip_id", tripIdList)
+        .neq("status", "cancelled")
+    : { data: [] };
 
-  // 名簿提出率
-  const { count: manifestCount } = await supabase
-    .from("boarding_manifests")
-    .select("id", { count: "exact", head: true })
-    .in(
-      "reservation_id",
-      (
-        await supabase
-          .from("reservations")
-          .select("id")
-          .in("trip_id", trips.map((t) => t.id))
-          .neq("status", "cancelled")
-      ).data?.map((r) => r.id) ?? []
-    );
+  const reservationIds = (reservationData ?? []).map((r) => r.id);
+  const reservationCount = reservationIds.length;
+
+  const { count: manifestCount } = reservationIds.length > 0
+    ? await supabase
+        .from("boarding_manifests")
+        .select("id", { count: "exact", head: true })
+        .in("reservation_id", reservationIds)
+    : { count: 0 };
 
   return (
     <div className="space-y-4">
+      <InstallBanner />
       <div>
         <p className="text-xs text-gray-500">
           {new Date().toLocaleDateString("ja-JP", {
@@ -100,29 +115,40 @@ export default async function CaptainDashboardPage() {
           })}
         </p>
         <h1 className="text-xl font-bold text-sea-dark">本日の状況</h1>
+        {(accountInfo?.boat_name || accountInfo?.name) && (
+          <p className="text-sm font-medium text-brand-600 mt-0.5">
+            🚢 {accountInfo.boat_name ?? accountInfo.name}
+          </p>
+        )}
       </div>
 
       {/* サマリーカード */}
       <div className="grid grid-cols-3 gap-3">
-        <Card className="text-center py-3">
-          <p className="text-2xl font-bold text-brand-600">{trips.length}</p>
-          <p className="text-xs text-gray-500 mt-0.5">本日の便</p>
-        </Card>
-        <Card className="text-center py-3">
-          <p className="text-2xl font-bold text-brand-600">
-            {reservationCount ?? 0}
-          </p>
-          <p className="text-xs text-gray-500 mt-0.5">予約数</p>
-        </Card>
-        <Card className="text-center py-3">
-          <p className="text-2xl font-bold text-brand-600">
-            {reservationCount
-              ? Math.round(((manifestCount ?? 0) / reservationCount) * 100)
-              : 0}
-            %
-          </p>
-          <p className="text-xs text-gray-500 mt-0.5">名簿提出率</p>
-        </Card>
+        <Link href="/captain/trips">
+          <Card className="text-center py-3 hover:shadow-md transition-shadow">
+            <p className="text-2xl font-bold text-brand-600">{trips.length}</p>
+            <p className="text-xs text-gray-500 mt-0.5">本日の便</p>
+          </Card>
+        </Link>
+        <Link href="/captain/reservations">
+          <Card className="text-center py-3 hover:shadow-md transition-shadow">
+            <p className="text-2xl font-bold text-brand-600">
+              {reservationCount ?? 0}
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">予約数</p>
+          </Card>
+        </Link>
+        <Link href="/captain/manifests">
+          <Card className="text-center py-3 hover:shadow-md transition-shadow">
+            <p className="text-2xl font-bold text-brand-600">
+              {reservationCount
+                ? Math.round(((manifestCount ?? 0) / reservationCount) * 100)
+                : 0}
+              %
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">名簿提出率</p>
+          </Card>
+        </Link>
       </div>
 
       {/* アラート */}
@@ -220,7 +246,30 @@ export default async function CaptainDashboardPage() {
         <Link href="/captain/fishing-report">
           <Card className="flex items-center gap-3 hover:shadow-md transition-shadow">
             <span className="text-2xl">🐟</span>
-            <span className="text-sm font-medium">釣果投稿</span>
+            <span className="text-sm font-medium">釣果投稿 / お知らせ</span>
+          </Card>
+        </Link>
+        <Link href="/captain/calendar">
+          <Card className="flex items-center gap-3 hover:shadow-md transition-shadow">
+            <span className="text-2xl">📆</span>
+            <span className="text-sm font-medium">カレンダー</span>
+          </Card>
+        </Link>
+        <Link href="/captain/stats">
+          <Card className="flex items-center gap-3 hover:shadow-md transition-shadow">
+            <span className="text-2xl">📊</span>
+            <span className="text-sm font-medium">統計</span>
+          </Card>
+        </Link>
+        <Link href="/captain/trip-requests">
+          <Card className="flex items-center gap-3 hover:shadow-md transition-shadow relative">
+            <span className="text-2xl">🙋</span>
+            <span className="text-sm font-medium">便リクエスト</span>
+            {(pendingRequests ?? 0) > 0 && (
+              <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
+                {pendingRequests}
+              </span>
+            )}
           </Card>
         </Link>
         <Link href="/captain/coupons">
@@ -230,12 +279,26 @@ export default async function CaptainDashboardPage() {
           </Card>
         </Link>
         <Link href="/captain/points">
-          <Card className="flex items-center gap-3 hover:shadow-md transition-shadow">
+          <Card className="flex items-center gap-3 hover:shadow-md transition-shadow relative">
             <span className="text-2xl">⭐</span>
             <span className="text-sm font-medium">ポイント管理</span>
+            {(pendingRedemptions ?? 0) > 0 && (
+              <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
+                {pendingRedemptions}
+              </span>
+            )}
           </Card>
         </Link>
       </div>
+
+      {/* 新しい便を追加 */}
+      <Link
+        href="/captain/trips"
+        className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-colors"
+      >
+        <span className="text-base">＋</span>
+        新しい便を追加
+      </Link>
 
       {/* 手動予約入力 */}
       <ManualReservationForm trips={tripOptions} />

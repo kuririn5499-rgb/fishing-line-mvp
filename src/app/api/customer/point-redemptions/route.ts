@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase";
+import { sendPushMessage } from "@/lib/line-messaging";
 import { z } from "zod";
 
 const RedeemSchema = z.object({
@@ -84,6 +85,40 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       .single();
 
     if (redemptionErr || !redemption) throw new Error(redemptionErr?.message);
+
+    // 船長・スタッフへ LINE 通知（失敗しても申請自体は成功扱い）
+    try {
+      const { data: account } = await supabase
+        .from("accounts")
+        .select("name, line_channel_access_token")
+        .eq("id", session.accountId)
+        .maybeSingle();
+
+      const token = account?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN;
+
+      if (token) {
+        const { data: captains } = await supabase
+          .from("users")
+          .select("line_user_id")
+          .eq("account_id", session.accountId)
+          .in("role", ["captain", "staff", "admin", "operator"])
+          .eq("is_active", true)
+          .not("line_user_id", "is", null);
+
+        const boatName = account?.name ?? "船ナビ";
+        const notifyText = `【${boatName}】\n\n⭐ ポイント特典の申請が届きました\n\n特典: ${reward.title}（${reward.points_required} pt）\n\nポイント管理ページから承認・却下をお願いします。`;
+
+        await Promise.allSettled(
+          (captains ?? [])
+            .filter((u) => /^U[0-9a-f]{32}$/i.test(u.line_user_id ?? ""))
+            .map((u) =>
+              sendPushMessage(token, u.line_user_id!, [{ type: "text", text: notifyText }])
+            )
+        );
+      }
+    } catch {
+      // 通知失敗は無視
+    }
 
     return NextResponse.json({ redemption }, { status: 201 });
   } catch (err) {

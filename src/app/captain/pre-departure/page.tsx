@@ -47,7 +47,17 @@ export default async function PreDeparturePage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-bold text-gray-800">出船前検査</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-bold text-gray-800">出船前検査</h1>
+        <a
+          href="https://docs.google.com/spreadsheets/d/1u-04jSpvzKy_4KR-BsynMjxZ2EK1l6faEEWEqndojsg/edit#gid=1624412960"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs px-3 py-1.5 rounded-lg border border-green-300 text-green-700 hover:bg-green-50 transition"
+        >
+          📊 シートを見る
+        </a>
+      </div>
 
       {!trips || trips.length === 0 ? (
         <Card>

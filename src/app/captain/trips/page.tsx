@@ -8,10 +8,12 @@ import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
 import { TripStatusBadge } from "@/components/ui/StatusBadge";
 import { TripCreateForm } from "@/components/forms/TripCreateForm";
+import { ClosedDayForm } from "@/components/forms/ClosedDayForm";
 import { TripEditForm } from "@/components/forms/TripEditForm";
 import { TripStatusUpdater } from "@/components/forms/TripStatusUpdater";
+import { TripDeleteButton } from "@/components/forms/TripDeleteButton";
 import { DepartureNoticeButton } from "@/components/forms/DepartureNoticeButton";
-import { todayJST, formatPrice } from "@/lib/repositories/utils";
+import { todayJST, formatPrice, formatDateWithDay } from "@/lib/repositories/utils";
 import type { Trip } from "@/types";
 
 export default async function CaptainTripsPage() {
@@ -23,28 +25,59 @@ export default async function CaptainTripsPage() {
   // 本日以降の便のみ表示
   const today = todayJST();
 
-  const { data: trips } = await supabase
-    .from("trips")
-    .select("*, boats(name)")
-    .eq("account_id", session.accountId)
-    .gte("trip_date", today)
-    .order("trip_date", { ascending: true })
-    .order("departure_time", { ascending: true })
-    .limit(50);
+  // 便一覧（pre_departure_checks をJOINで取得）+ 船一覧 を並列取得
+  const [{ data: tripsRaw }, { data: boats }] = await Promise.all([
+    supabase
+      .from("trips")
+      .select("*, boats(name), pre_departure_checks(departure_judgement, cancel_reason)")
+      .eq("account_id", session.accountId)
+      .gte("trip_date", today)
+      .order("trip_date", { ascending: true })
+      .order("departure_time", { ascending: true })
+      .limit(50),
+    supabase
+      .from("boats")
+      .select("id, name")
+      .eq("account_id", session.accountId)
+      .eq("is_active", true),
+  ]);
 
-  // 船一覧（便作成フォーム用）
-  const { data: boats } = await supabase
-    .from("boats")
-    .select("id, name")
-    .eq("account_id", session.accountId)
-    .eq("is_active", true);
+  type DepartureCheck = { departure_judgement: string | null; cancel_reason: string | null };
+  const departureMap = new Map(
+    (tripsRaw ?? []).flatMap((t) => {
+      const checks = t.pre_departure_checks as unknown as DepartureCheck[] | null;
+      const check = checks?.[0];
+      if (!check?.departure_judgement) return [];
+      return [[t.id, { judgement: check.departure_judgement as "go" | "cancel", cancelReason: check.cancel_reason }]];
+    })
+  );
+
+  const trips = tripsRaw as typeof tripsRaw;
+
+  // 便ごとの予約人数を集計
+  const tripIdList = (tripsRaw ?? []).map((t) => t.id);
+  const { data: reservationRows } = tripIdList.length > 0
+    ? await supabase
+        .from("reservations")
+        .select("trip_id, passengers_count")
+        .in("trip_id", tripIdList)
+        .neq("status", "cancelled")
+    : { data: [] };
+
+  const reservedMap = new Map<string, number>();
+  for (const r of reservationRows ?? []) {
+    reservedMap.set(r.trip_id, (reservedMap.get(r.trip_id) ?? 0) + (r.passengers_count ?? 0));
+  }
 
   return (
     <div className="space-y-5">
       <h1 className="text-lg font-bold text-gray-800">便管理</h1>
 
-      {/* 便作成フォーム */}
-      <TripCreateForm boats={boats ?? []} />
+      {/* 便作成・休船設定 */}
+      <div className="space-y-2">
+        <TripCreateForm boats={boats ?? []} />
+        <ClosedDayForm />
+      </div>
 
       {/* 便一覧 */}
       <section>
@@ -62,7 +95,7 @@ export default async function CaptainTripsPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <TripStatusBadge status={trip.status} />
                       <span className="text-sm font-semibold">
-                        {trip.trip_date}
+                        {formatDateWithDay(trip.trip_date)}
                       </span>
                       {trip.departure_time && (
                         <span className="text-xs text-gray-500">
@@ -79,6 +112,19 @@ export default async function CaptainTripsPage() {
                         </span>
                       )}
                     </p>
+                    <p className="text-xs mt-0.5">
+                      {(() => {
+                        const reserved = reservedMap.get(trip.id) ?? 0;
+                        const cap = trip.capacity ?? null;
+                        const isFull = cap !== null && reserved >= cap;
+                        return (
+                          <span className={isFull ? "text-red-500 font-medium" : "text-brand-600 font-medium"}>
+                            予約 {reserved}名
+                            {cap !== null && <span className="text-gray-400 font-normal"> / 定員 {cap}名</span>}
+                          </span>
+                        );
+                      })()}
+                    </p>
                     {trip.weather_note && (
                       <p className="text-xs text-gray-400 mt-0.5">{trip.weather_note}</p>
                     )}
@@ -86,14 +132,17 @@ export default async function CaptainTripsPage() {
                     <TripEditForm trip={trip} boats={boats ?? []} />
                   </div>
                 </div>
-                {/* ステータス変更・出船判断 */}
+                {/* ステータス変更・出船判断・削除 */}
                 <TripStatusUpdater tripId={trip.id} currentStatus={trip.status}>
                   <DepartureNoticeButton
                     tripId={trip.id}
                     tripDate={trip.trip_date}
                     departureTime={trip.departure_time}
                     targetSpecies={trip.target_species}
+                    initialJudgement={departureMap.get(trip.id)?.judgement ?? null}
+                    initialCancelReason={departureMap.get(trip.id)?.cancelReason ?? null}
                   />
+                  <TripDeleteButton tripId={trip.id} />
                 </TripStatusUpdater>
               </Card>
             ))}

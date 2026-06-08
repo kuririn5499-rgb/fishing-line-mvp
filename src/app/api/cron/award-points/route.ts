@@ -65,7 +65,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const toAward = reservations.filter((r) => r.customer_id && !awarded.has(r.id));
 
   if (toAward.length === 0) {
-    return NextResponse.json({ awarded: 0, message: "付与済み済み" });
+    return NextResponse.json({ awarded: 0, message: "付与済み" });
   }
 
   // customer_id 単位でまとめる
@@ -84,26 +84,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   for (const [customerId, { accountId, reservationIds }] of byCustomer) {
     const pts = reservationIds.length; // 1件 = 1ポイント
 
-    // 現在のポイント・乗船回数を取得
+    // 現在の乗船回数を取得
     const { data: customer } = await supabase
       .from("customers")
-      .select("points, boarding_count")
+      .select("boarding_count")
       .eq("id", customerId)
       .maybeSingle();
 
     if (!customer) continue;
 
-    // ポイントと乗船回数を更新
+    // points は既存の RPC で原子的に加算（競合安全）
+    await supabase.rpc("increment_customer_points", { p_customer_id: customerId, p_delta: pts });
+
+    // boarding_count を更新
     await supabase
       .from("customers")
-      .update({
-        points: customer.points + pts,
-        boarding_count: customer.boarding_count + pts,
-      })
+      .update({ boarding_count: customer.boarding_count + pts })
       .eq("id", customerId);
 
     // 予約ごとに point_log を記録（reservation_id で冪等性を保証）
-    await supabase.from("point_logs").insert(
+    const { error: logErr } = await supabase.from("point_logs").insert(
       reservationIds.map((rid) => ({
         account_id: accountId,
         customer_id: customerId,
@@ -112,6 +112,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         reason: "乗船ポイント",
       }))
     );
+    if (logErr) {
+      console.error(`[cron/award-points] point_log 挿入失敗 customer=${customerId}:`, logErr);
+    }
 
     totalAwarded += pts;
   }

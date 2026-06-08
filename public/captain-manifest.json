@@ -1,0 +1,26 @@
+{
+  "name": "Fishing Line 船長",
+  "short_name": "船長",
+  "description": "遊漁船 予約・乗務管理システム",
+  "start_url": "/captain",
+  "scope": "/captain",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d2137",
+  "theme_color": "#0d2137",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/captain-icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/captain-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

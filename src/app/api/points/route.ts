@@ -54,6 +54,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const supabase = createServerSupabaseClient();
     const { customer_id, points_delta, reason, reservation_id } = parsed.data;
 
+    // customer が自アカウントに属することを確認
+    const { data: customerCheck } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("id", customer_id)
+      .eq("account_id", session.accountId)
+      .maybeSingle();
+    if (!customerCheck) {
+      return NextResponse.json({ error: "顧客が見つかりません" }, { status: 404 });
+    }
+
     // ポイントログを作成
     await supabase.from("point_logs").insert({
       account_id: session.accountId,

@@ -11,7 +11,7 @@ import {
   getManifestByReservation,
   updateManifestSheetRow,
 } from "@/lib/repositories/manifests";
-import { appendManifestToSheet } from "@/lib/google-sheets";
+import { appendManifestToSheet, resolveSheetsCreds } from "@/lib/google-sheets";
 import { createServerSupabaseClient } from "@/lib/supabase";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -20,6 +20,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const reservationId = req.nextUrl.searchParams.get("reservation_id");
     if (!reservationId) {
       return NextResponse.json({ error: "reservation_id は必須です" }, { status: 400 });
+    }
+
+    // 予約が自アカウントに属することを確認
+    const supabase = createServerSupabaseClient();
+    const { data: resCheck } = await supabase
+      .from("reservations")
+      .select("id")
+      .eq("id", reservationId)
+      .eq("account_id", session.accountId)
+      .maybeSingle();
+    if (!resCheck) {
+      return NextResponse.json({ manifest: null });
     }
 
     const manifest = await getManifestByReservation(reservationId);
@@ -52,12 +64,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       .eq("user_id", session.userId)
       .maybeSingle();
 
-    // 予約コードと便日付を取得（Sheets 書き込み用）
+    // 予約コードと便日付を取得（所有権確認 + Sheets 書き込み用）
     const { data: reservation } = await supabase
       .from("reservations")
       .select("reservation_code, trips(trip_date)")
       .eq("id", parsed.data.reservation_id)
+      .eq("account_id", session.accountId)
       .maybeSingle();
+
+    if (!reservation) {
+      return NextResponse.json({ error: "予約が見つかりません" }, { status: 404 });
+    }
 
     const manifest = await upsertManifest(
       session.accountId,
@@ -71,13 +88,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       try {
         const tripsData = reservation.trips as unknown as { trip_date: string } | { trip_date: string }[] | null;
         const tripDate = (Array.isArray(tripsData) ? tripsData[0]?.trip_date : tripsData?.trip_date) ?? "";
-        const rowNumber = await appendManifestToSheet(
-          manifest,
-          reservation.reservation_code,
-          tripDate
-        );
-        if (rowNumber > 0) {
-          await updateManifestSheetRow(manifest.id, rowNumber);
+
+        const { data: acct } = await supabase
+          .from("accounts")
+          .select("google_spreadsheet_id, google_service_account_email, google_service_account_private_key")
+          .eq("id", session.accountId)
+          .maybeSingle();
+
+        const sheetsCreds = resolveSheetsCreds(acct);
+        if (sheetsCreds) {
+          const rowNumber = await appendManifestToSheet(
+            manifest,
+            reservation.reservation_code,
+            tripDate,
+            sheetsCreds
+          );
+          if (rowNumber > 0) {
+            await updateManifestSheetRow(manifest.id, rowNumber);
+          }
         }
       } catch (sheetsErr) {
         console.error("[manifests] Google Sheets 書き込みエラー:", sheetsErr);

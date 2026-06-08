@@ -14,6 +14,15 @@ export function formatPrice(price: number | null | undefined): string {
   return `¥${price.toLocaleString("ja-JP")}`;
 }
 
+/** YYYY-MM-DD の日付文字列に曜日を付けて返す（例: "2024-06-06（木）"） */
+export function formatDateWithDay(dateStr: string | null | undefined): string {
+  if (!dateStr) return "—";
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const days = ["日", "月", "火", "水", "木", "金", "土"];
+  return `${dateStr}（${days[date.getDay()]}）`;
+}
+
 /** 日本時間の今日の日付を YYYY-MM-DD 形式で返す */
 export function todayJST(): string {
   return new Date()

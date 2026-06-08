@@ -32,6 +32,7 @@ export type AuthRequest = z.infer<typeof AuthRequestSchema>;
 export const TripCreateSchema = z.object({
   boat_id: z.string().uuid("boat_id は UUID で指定してください").optional(),
   trip_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD 形式で入力してください"),
+  status: z.enum(["open", "closed"]).default("open"),
   departure_time: z
     .string()
     .regex(/^\d{2}:\d{2}$/, "HH:MM 形式で入力してください")
@@ -52,7 +53,7 @@ export type TripCreate = z.infer<typeof TripCreateSchema>;
 
 export const TripStatusUpdateSchema = z.object({
   trip_id: z.string().uuid(),
-  status: z.enum(["draft", "open", "full", "confirmed", "cancelled", "completed"]),
+  status: z.enum(["draft", "open", "full", "confirmed", "cancelled", "completed", "closed"]),
 });
 export type TripStatusUpdate = z.infer<typeof TripStatusUpdateSchema>;
 
@@ -63,9 +64,11 @@ export type TripStatusUpdate = z.infer<typeof TripStatusUpdateSchema>;
 export const ReservationCreateSchema = z.object({
   trip_id: z.string().uuid("便 ID は必須です"),
   customer_name: z.string().min(1, "お名前は必須です").max(100),
+  customer_phone: z.string().regex(phoneRegex, "電話番号の形式が正しくありません").min(1, "電話番号は必須です"),
   passengers_count: z.coerce.number().int().min(1, "乗船人数は1名以上です").max(20),
   coupon_id: z.string().uuid().optional(),
   memo: z.string().max(500).optional(),
+  waitlist: z.boolean().optional(),
 });
 export type ReservationCreate = z.infer<typeof ReservationCreateSchema>;
 
@@ -111,6 +114,22 @@ export const ManifestSubmitSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 export type ManifestSubmit = z.infer<typeof ManifestSubmitSchema>;
+
+// QR ビジター経由の名簿提出（予約も同時作成）
+export const VisitorManifestSchema = z.object({
+  account_id: z.string().uuid(),
+  trip_id: z.string().uuid(),
+  passengers_count: z.coerce.number().int().min(1).max(20),
+  full_name: z.string().min(1, "氏名は必須です").max(100),
+  age: z.coerce.number().int().min(0).max(150).optional(),
+  phone: z.string().regex(phoneRegex, "電話番号の形式が正しくありません"),
+  address: z.string().min(1, "住所は必須です").max(300),
+  emergency_name: z.string().max(100).optional().or(z.literal("")),
+  emergency_phone: z.string().regex(phoneRegex, "緊急連絡先電話番号の形式が正しくありません"),
+  companions: z.array(CompanionSchema).max(19).optional().default([]),
+  notes: z.string().max(500).optional(),
+});
+export type VisitorManifest = z.infer<typeof VisitorManifestSchema>;
 
 // =====================
 // 出船前検査（PreDepartureCheck）
@@ -212,6 +231,27 @@ export const PointGrantSchema = z.object({
   reservation_id: z.string().uuid().optional(),
 });
 export type PointGrant = z.infer<typeof PointGrantSchema>;
+
+// =====================
+// 便リクエスト
+// =====================
+
+export const TripRequestCreateSchema = z.object({
+  requested_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日付を選択してください"),
+  target_species: z.string().max(200).optional(),
+  message: z.string().max(500).optional(),
+});
+export type TripRequestCreate = z.infer<typeof TripRequestCreateSchema>;
+
+export const TripRequestApproveSchema = z.object({
+  boat_id: z.string().uuid().optional(),
+  target_species: z.string().max(200).optional(),
+  departure_time: z.string().regex(/^\d{2}:\d{2}$/, "HH:MM 形式で入力してください").optional().or(z.literal("")),
+  return_time: z.string().regex(/^\d{2}:\d{2}$/, "HH:MM 形式で入力してください").optional().or(z.literal("")),
+  capacity: z.coerce.number().int().min(1).max(100).optional(),
+  price_per_person: z.coerce.number().int().min(0).max(1000000).optional(),
+});
+export type TripRequestApprove = z.infer<typeof TripRequestApproveSchema>;
 
 // =====================
 // ユーザー管理（admin）

@@ -17,12 +17,13 @@ interface TripStatusUpdaterProps {
 
 /** 現在のステータスから遷移可能なステータス */
 const transitions: Record<TripStatus, TripStatus[]> = {
-  draft:     ["open", "cancelled"],
-  open:      ["full", "cancelled"],
-  full:      ["open", "cancelled"],
+  draft:     ["open", "closed", "cancelled"],
+  open:      ["full", "closed", "cancelled"],
+  full:      ["open", "closed", "cancelled"],
   confirmed: ["open", "cancelled", "completed"],
   cancelled: ["open"],
   completed: ["open"],
+  closed:    ["open"],
 };
 
 const statusLabels: Record<TripStatus, string> = {
@@ -32,6 +33,7 @@ const statusLabels: Record<TripStatus, string> = {
   confirmed: "確定",
   cancelled: "中止",
   completed: "完了",
+  closed:    "休船にする",
 };
 
 // 「受付開始」は draft からの遷移のみ
@@ -58,7 +60,11 @@ export function TripStatusUpdater({ tripId, currentStatus, children }: TripStatu
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "更新失敗");
       setStatus(newStatus);
-      show(`ステータスを「${statusLabels[newStatus]}」に変更しました`, "success");
+      if (json.cal_warning) {
+        show(`ステータス変更済（カレンダー同期失敗: ${json.cal_warning}）`, "error");
+      } else {
+        show(`ステータスを「${statusLabels[newStatus]}」に変更しました`, "success");
+      }
     } catch (err) {
       show(err instanceof Error ? err.message : "更新失敗", "error");
     } finally {
@@ -81,6 +87,7 @@ export function TripStatusUpdater({ tripId, currentStatus, children }: TripStatu
               key={s}
               size="sm"
               variant={s === "cancelled" ? "danger" : s === "open" && status !== "draft" ? "primary" : "secondary"}
+              className={s === "closed" ? "!bg-slate-100 !text-slate-600 hover:!bg-slate-200" : undefined}
               onClick={() => updateStatus(s)}
               loading={loading}
             >

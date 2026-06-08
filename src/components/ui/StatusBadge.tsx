@@ -15,6 +15,7 @@ const tripStatusConfig: Record<
   confirmed: { label: "確定",     className: "bg-blue-100 text-blue-700" },
   cancelled: { label: "中止",     className: "bg-red-100 text-red-700" },
   completed: { label: "完了",     className: "bg-gray-100 text-gray-500" },
+  closed:    { label: "休船",     className: "bg-slate-200 text-slate-600" },
 };
 
 const reservationStatusConfig: Record<

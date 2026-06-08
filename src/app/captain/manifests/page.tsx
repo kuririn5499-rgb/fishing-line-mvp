@@ -5,7 +5,10 @@
 import { getSession } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
-import { todayJST } from "@/lib/repositories/utils";
+import { todayJST, formatDateWithDay } from "@/lib/repositories/utils";
+import { ManifestReminderButton } from "@/components/forms/ManifestReminderButton";
+import { CaptainManifestInputButton } from "@/components/forms/CaptainManifestInputButton";
+import { QRModal } from "@/components/captain/QRModal";
 
 export default async function CaptainManifestsPage() {
   const session = await getSession();
@@ -13,6 +16,13 @@ export default async function CaptainManifestsPage() {
 
   const supabase = createServerSupabaseClient();
   const today = todayJST();
+
+  // アカウントのスラッグ取得（QRコード用）
+  const { data: accountInfo } = await supabase
+    .from("accounts")
+    .select("slug")
+    .eq("id", session.accountId)
+    .maybeSingle();
 
   // 本日の便
   const { data: todayTrips } = await supabase
@@ -24,11 +34,11 @@ export default async function CaptainManifestsPage() {
 
   const tripIds = todayTrips?.map((t) => t.id) ?? [];
 
-  // 便に紐づく予約
+  // 便に紐づく予約（顧客名も取得）
   const { data: reservations } = tripIds.length
     ? await supabase
         .from("reservations")
-        .select("id, reservation_code, passengers_count, status, trip_id")
+        .select("id, reservation_code, passengers_count, status, trip_id, customers(full_name)")
         .in("trip_id", tripIds)
         .neq("status", "cancelled")
     : { data: [] };
@@ -50,8 +60,29 @@ export default async function CaptainManifestsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-bold text-gray-800">乗船名簿確認</h1>
-      <p className="text-xs text-gray-500">本日 ({today}) の名簿一覧</p>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-bold text-gray-800">乗船名簿確認</h1>
+        <div className="flex items-center gap-2">
+          {accountInfo?.slug && (
+            <QRModal
+              accountSlug={accountInfo.slug}
+              trips={(todayTrips ?? []).map((t) => ({
+                id: t.id,
+                label: `${t.departure_time?.slice(0, 5) ?? "—"} ${(Array.isArray(t.boats) ? t.boats[0]?.name : (t.boats as {name:string}|null)?.name) ?? ""} ${t.target_species ?? ""}`.trim(),
+              }))}
+            />
+          )}
+          <a
+            href="https://docs.google.com/spreadsheets/d/1u-04jSpvzKy_4KR-BsynMjxZ2EK1l6faEEWEqndojsg/edit#gid=1820385280"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs px-3 py-1.5 rounded-lg border border-green-300 text-green-700 hover:bg-green-50 transition"
+          >
+            📊 シート
+          </a>
+        </div>
+      </div>
+      <p className="text-xs text-gray-500">本日 {formatDateWithDay(today)} の名簿一覧</p>
 
       {!todayTrips || todayTrips.length === 0 ? (
         <Card>
@@ -93,16 +124,18 @@ export default async function CaptainManifestsPage() {
                       const manifest = manifestMap.get(r.id);
                       const companions =
                         (manifest?.companions_json as unknown[])?.length ?? 0;
+                      type ResRow = { customers?: { full_name: string | null } | null };
+                      const customerName = (r as unknown as ResRow).customers?.full_name ?? null;
 
                       return (
                         <Card key={r.id}>
                           <div className="flex items-start justify-between">
                             <div>
                               <p className="text-sm font-medium">
-                                {manifest?.full_name ?? "（未提出）"}
+                                {manifest?.full_name ?? customerName ?? "（名前未登録）"}
                               </p>
                               <p className="text-xs text-gray-500 mt-0.5">
-                                予約コード: {r.reservation_code} / {r.passengers_count}名
+                                {r.passengers_count}名
                                 {companions > 0 && ` ＋同行者${companions}名`}
                               </p>
                               {manifest?.submitted_at && (
@@ -115,16 +148,31 @@ export default async function CaptainManifestsPage() {
                                 </p>
                               )}
                             </div>
-                            <span
-                              className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                manifest
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-red-50 text-red-500"
-                              }`}
-                            >
-                              {manifest ? "提出済" : "未提出"}
-                            </span>
+                            <div className="flex flex-col items-end gap-1.5">
+                              <span
+                                className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                  manifest
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-red-50 text-red-500"
+                                }`}
+                              >
+                                {manifest ? "提出済" : "未提出"}
+                              </span>
+                              {!manifest && (
+                                <ManifestReminderButton
+                                  reservationId={r.id}
+                                  customerName={customerName}
+                                />
+                              )}
+                            </div>
                           </div>
+                          {!manifest && (
+                            <CaptainManifestInputButton
+                              reservationId={r.id}
+                              customerName={customerName}
+                              passengersCount={r.passengers_count}
+                            />
+                          )}
                         </Card>
                       );
                     })}

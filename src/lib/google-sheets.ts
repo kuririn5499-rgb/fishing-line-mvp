@@ -12,20 +12,53 @@
 import { google } from "googleapis";
 import type { BoardingManifest, PreDepartureCheck, DutyLog } from "@/types";
 
-function getSheetsClient() {
-  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const key = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  if (!email || !key) throw new Error("Google サービスアカウント設定が不足しています");
+// =====================
+// 認証情報解決
+// =====================
 
-  const auth = new google.auth.JWT({
+export interface SheetsCreds {
+  spreadsheetId: string;
+  email: string;
+  key: string;
+}
+
+/**
+ * アカウント行から Sheets 認証情報を解決する。
+ * DB 値を優先し、未設定なら環境変数にフォールバックする。
+ */
+export function resolveSheetsCreds(
+  account: {
+    google_spreadsheet_id?: string | null;
+    google_service_account_email?: string | null;
+    google_service_account_private_key?: string | null;
+  } | null
+): SheetsCreds | null {
+  const spreadsheetId =
+    account?.google_spreadsheet_id || process.env.GOOGLE_SPREADSHEET_ID;
+  const email =
+    account?.google_service_account_email ||
+    process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const rawKey =
+    account?.google_service_account_private_key ||
+    process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
+
+  if (!spreadsheetId || !email || !rawKey) return null;
+
+  return {
+    spreadsheetId,
     email,
-    key,
+    key: rawKey.replace(/\\n/g, "\n"),
+  };
+}
+
+function buildSheetsClient(creds: SheetsCreds) {
+  const auth = new google.auth.JWT({
+    email: creds.email,
+    key: creds.key,
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
   return google.sheets({ version: "v4", auth });
 }
-
-const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID ?? "";
 
 /** 追記後の行番号を解析して返す共通ヘルパー */
 function parseRowNumber(updatedRange: string | null | undefined): number {
@@ -44,18 +77,21 @@ export async function appendReservationToSheet(
   reservationCode: string,
   tripId: string,
   customerName: string,
+  customerPhone: string,
   passengersCount: number,
   status: string,
   memo: string | null,
-  createdAt: string
+  createdAt: string,
+  creds: SheetsCreds
 ): Promise<number> {
-  const sheets = getSheetsClient();
+  const sheets = buildSheetsClient(creds);
 
   const row = [
     tripDate,
     reservationCode,
     tripId,
     customerName,
+    customerPhone,
     String(passengersCount),
     status,
     memo ?? "",
@@ -63,8 +99,8 @@ export async function appendReservationToSheet(
   ];
 
   const res = await sheets.spreadsheets.values.append({
-    spreadsheetId: SPREADSHEET_ID,
-    range: "予約!A:H",
+    spreadsheetId: creds.spreadsheetId,
+    range: "予約!A:I",
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [row] },
   });
@@ -82,9 +118,10 @@ export async function appendReservationToSheet(
 export async function appendManifestToSheet(
   manifest: BoardingManifest,
   reservationCode: string,
-  tripDate: string
+  tripDate: string,
+  creds: SheetsCreds
 ): Promise<number> {
-  const sheets = getSheetsClient();
+  const sheets = buildSheetsClient(creds);
 
   const makeRow = (person: {
     full_name?: string | null;
@@ -110,13 +147,12 @@ export async function appendManifestToSheet(
   ];
 
   const res = await sheets.spreadsheets.values.append({
-    spreadsheetId: SPREADSHEET_ID,
+    spreadsheetId: creds.spreadsheetId,
     range: "乗船名簿!A:G",
     valueInputOption: "USER_ENTERED",
     requestBody: { values: rows },
   });
 
-  // 先頭行番号を返す（最終行番号 - 追記行数 + 1）
   const lastRow = parseRowNumber(res.data.updates?.updatedRange);
   return lastRow > 0 ? lastRow - rows.length + 1 : 0;
 }
@@ -124,20 +160,14 @@ export async function appendManifestToSheet(
 // =====================
 // 出船前点検
 // =====================
-// 列 A〜AF (32列):
-//   出船日 | 船名 | 天候 | 風力 | 波浪 | 視界
-//   | 船体 | 排水 | 燃料 | 燃料弁 | エンジン油 | 冷却水 | バッテリー | 救命設備
-//   | 無線 | 法定備品 | 救助はしご | 乗降ステップ | 釣具 | 計器類 | 冷却水確認 | エンジン確認
-//   | アルコール | 船員状態
-//   | 不具合事項 | 点検者 | 点検場所 | アルコール数値 | 備考
-//   | 出船判断 | 中止理由 | 検査日時
 
 export async function appendPreDepartureToSheet(
   check: PreDepartureCheck,
   tripDate: string,
-  boatName: string
+  boatName: string,
+  creds: SheetsCreds
 ): Promise<number> {
-  const sheets = getSheetsClient();
+  const sheets = buildSheetsClient(creds);
   const b = (v: boolean) => (v ? "✓" : "✗");
 
   const row = [
@@ -176,7 +206,7 @@ export async function appendPreDepartureToSheet(
   ];
 
   const res = await sheets.spreadsheets.values.append({
-    spreadsheetId: SPREADSHEET_ID,
+    spreadsheetId: creds.spreadsheetId,
     range: "出船前点検!A:AF",
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [row] },
@@ -188,16 +218,14 @@ export async function appendPreDepartureToSheet(
 // =====================
 // 乗務記録
 // =====================
-// 列 A〜R (18列):
-//   出船日 | 船名 | 出港時刻 | 帰港時刻 | 出港場所 | 帰港場所 | 船長名 | 乗船者数
-//   | 釣り場 | 天候 | 海況 | 漁獲概要 | 事故報告 | 緊急連絡記録 | 運航者所見 | 安全指導 | 備考 | 記録日時
 
 export async function appendDutyLogToSheet(
   log: DutyLog,
   tripDate: string,
-  boatName: string
+  boatName: string,
+  creds: SheetsCreds
 ): Promise<number> {
-  const sheets = getSheetsClient();
+  const sheets = buildSheetsClient(creds);
 
   const row = [
     tripDate,
@@ -221,7 +249,7 @@ export async function appendDutyLogToSheet(
   ];
 
   const res = await sheets.spreadsheets.values.append({
-    spreadsheetId: SPREADSHEET_ID,
+    spreadsheetId: creds.spreadsheetId,
     range: "乗務記録!A:R",
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [row] },

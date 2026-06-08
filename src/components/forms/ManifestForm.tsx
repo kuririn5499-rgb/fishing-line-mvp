@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Toast, useToast } from "@/components/ui/Toast";
 import type { FieldError } from "react-hook-form";
 import type { Reservation, BoardingManifest } from "@/types";
+import { formatDateWithDay } from "@/lib/repositories/utils";
 
 interface ManifestFormProps {
   reservations: Reservation[];
@@ -80,12 +81,18 @@ export function ManifestForm({ reservations, defaultValues }: ManifestFormProps)
           <FormField label="予約" error={errors.reservation_id} required>
             <Select {...register("reservation_id")} hasError={!!errors.reservation_id}>
               <option value="">— 選択してください —</option>
-              {reservations.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {(r as unknown as { trips?: { trip_date?: string } }).trips?.trip_date ?? ""}{" "}
-                  予約コード: {r.reservation_code}
-                </option>
-              ))}
+              {reservations.map((r) => {
+                type TripInfo = { trip_date?: string; departure_time?: string | null; target_species?: string | null };
+                const trip = (r as unknown as { trips?: TripInfo }).trips;
+                const dateStr = trip?.trip_date ? formatDateWithDay(trip.trip_date) : "";
+                const time = trip?.departure_time ? ` ${trip.departure_time.slice(0, 5)}〜` : "";
+                const species = trip?.target_species ? ` ${trip.target_species}` : "";
+                return (
+                  <option key={r.id} value={r.id}>
+                    {dateStr}{time}{species}
+                  </option>
+                );
+              })}
             </Select>
           </FormField>
         </div>

@@ -14,7 +14,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   try {
-    await requireSession("captain");
+    const session = await requireSession("captain");
 
     const { id: tripId } = await params;
     const body = await req.json();
@@ -30,11 +30,12 @@ export async function POST(
     const { judgement, cancel_reason } = parsed.data;
     const supabase = createServerSupabaseClient();
 
-    // 便情報を取得
+    // 便情報を取得（自アカウントのみ）
     const { data: trip, error: tripErr } = await supabase
       .from("trips")
       .select("*, boats(name)")
       .eq("id", tripId)
+      .eq("account_id", session.accountId)
       .single();
 
     if (tripErr || !trip) {
@@ -53,19 +54,56 @@ export async function POST(
       { onConflict: "trip_id" }
     );
 
-    // アクティブな予約者の LINE user ID を取得
-    const { data: reservations } = await supabase
+    // アクティブな予約者の LINE user ID を取得（FK結合に依存しない段階クエリ）
+    const { data: reservations, error: reservationsErr } = await supabase
       .from("reservations")
-      .select("customers(users(line_user_id))")
+      .select("customer_id")
       .eq("trip_id", tripId)
       .in("status", ["pending", "confirmed"]);
 
-    const lineUserIds: string[] = [];
-    for (const r of reservations ?? []) {
-      const customer = r.customers as { users?: { line_user_id?: string } | null } | null;
-      const lineId = customer?.users?.line_user_id;
-      if (lineId) lineUserIds.push(lineId);
+    if (reservationsErr) {
+      console.error("[departure-notice] reservations取得エラー:", reservationsErr);
     }
+
+    const customerIds = (reservations ?? [])
+      .map((r) => r.customer_id)
+      .filter((id): id is string => !!id);
+
+    const lineUserIds: string[] = [];
+
+    if (customerIds.length > 0) {
+      const { data: customers, error: customersErr } = await supabase
+        .from("customers")
+        .select("user_id")
+        .in("id", customerIds)
+        .not("user_id", "is", null);
+
+      if (customersErr) {
+        console.error("[departure-notice] customers取得エラー:", customersErr);
+      }
+
+      const userIds = (customers ?? [])
+        .map((c) => c.user_id)
+        .filter((id): id is string => !!id);
+
+      if (userIds.length > 0) {
+        const { data: users, error: usersErr } = await supabase
+          .from("users")
+          .select("line_user_id")
+          .in("id", userIds)
+          .not("line_user_id", "is", null);
+
+        if (usersErr) {
+          console.error("[departure-notice] users取得エラー:", usersErr);
+        }
+
+        for (const u of users ?? []) {
+          if (u.line_user_id) lineUserIds.push(u.line_user_id);
+        }
+      }
+    }
+
+    console.log(`[departure-notice] tripId=${tripId} 予約数=${reservations?.length ?? 0} LINE通知対象=${lineUserIds.length}名`);
 
     // メッセージ生成
     const boatName = (trip.boats as { name: string } | null)?.name ?? "長崎丸";
@@ -89,8 +127,14 @@ export async function POST(
       messageText += `\n\n理由：${cancel_reason}`;
     }
 
-    // 予約者に個別プッシュ送信
-    const token = process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
+    // アカウントの LINE トークンを取得（DB 優先、env fallback）
+    const { data: accountData } = await supabase
+      .from("accounts")
+      .select("line_channel_access_token")
+      .eq("id", trip.account_id)
+      .single();
+
+    const token = accountData?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
     let sentCount = 0;
     for (const lineUserId of lineUserIds) {
       try {

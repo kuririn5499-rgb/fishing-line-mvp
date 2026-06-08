@@ -7,6 +7,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { TripCreateSchema, type TripCreate } from "@/lib/schemas";
 import { FormField, Input, Select, Textarea } from "@/components/ui/FormField";
 import { Button } from "@/components/ui/Button";
@@ -19,6 +20,7 @@ interface TripCreateFormProps {
 export function TripCreateForm({ boats }: TripCreateFormProps) {
   const { toast, show, hide } = useToast();
   const [open, setOpen] = useState(false);
+  const router = useRouter();
 
   const {
     register,
@@ -44,6 +46,7 @@ export function TripCreateForm({ boats }: TripCreateFormProps) {
       show("便を作成しました", "success");
       reset();
       setOpen(false);
+      router.refresh();
     } catch (err) {
       show(err instanceof Error ? err.message : "作成に失敗しました", "error");
     }
