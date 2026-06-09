@@ -183,6 +183,45 @@ export function buildRequestApprovedMessage(params: {
   return [{ type: "text", text }];
 }
 
+/** 便リクエスト受信通知（船長向け） */
+export function buildNewTripRequestMessage(params: {
+  customerName: string | null;
+  requestedDate: string;
+  targetSpecies: string | null;
+  message: string | null;
+}): LineMessage[] {
+  const { customerName, requestedDate, targetSpecies, message } = params;
+  const [y, m, d] = requestedDate.split("-").map(Number);
+  const days = ["日", "月", "火", "水", "木", "金", "土"];
+  const dayLabel = days[new Date(y, m - 1, d).getDay()];
+  const dateStr = `${m}/${d}（${dayLabel}）`;
+  let text = `📩 便リクエストが届きました\n\n👤 ${customerName ?? "お客様"}\n📅 ${dateStr}`;
+  if (targetSpecies) text += `\n🎣 ${targetSpecies}`;
+  if (message) text += `\n💬 ${message}`;
+  return [{ type: "text", text }];
+}
+
+/** 予約受信通知（船長向け） */
+export function buildNewReservationMessage(params: {
+  customerName: string | null;
+  tripDate: string;
+  targetSpecies: string | null;
+  passengersCount: number;
+  reservationCode: string;
+  isWaitlist: boolean;
+}): LineMessage[] {
+  const { customerName, tripDate, targetSpecies, passengersCount, reservationCode, isWaitlist } = params;
+  const [y, m, d] = tripDate.split("-").map(Number);
+  const days = ["日", "月", "火", "水", "木", "金", "土"];
+  const dayLabel = days[new Date(y, m - 1, d).getDay()];
+  const dateStr = `${m}/${d}（${dayLabel}）`;
+  const label = isWaitlist ? "キャンセル待ち" : "予約";
+  let text = `📩 新しい${label}が入りました\n\n👤 ${customerName ?? "お客様"}（${passengersCount}名）\n📅 ${dateStr}`;
+  if (targetSpecies) text += `\n🎣 ${targetSpecies}`;
+  text += `\n📋 ${reservationCode}`;
+  return [{ type: "text", text }];
+}
+
 /** キャンセル待ち繰り上がり通知（顧客向け） */
 export function buildWaitlistPromotedMessage(params: {
   boatName: string;

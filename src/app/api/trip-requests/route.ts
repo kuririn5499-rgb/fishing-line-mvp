@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { TripRequestCreateSchema } from "@/lib/schemas";
 import { createServerSupabaseClient } from "@/lib/supabase";
+import { sendPushMessage, buildNewTripRequestMessage } from "@/lib/line-messaging";
 
 export async function GET(): Promise<NextResponse> {
   try {
@@ -56,6 +57,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       .single();
 
     if (error || !data) throw new Error(error?.message ?? "リクエスト作成失敗");
+
+    // 船長・スタッフに LINE 通知（失敗しても続行）
+    try {
+      const [{ data: account }, { data: captains }, { data: customer }] = await Promise.all([
+        supabase.from("accounts").select("line_channel_access_token").eq("id", session.accountId).maybeSingle(),
+        supabase.from("users").select("line_user_id").eq("account_id", session.accountId).in("role", ["captain", "staff", "admin", "operator"]).eq("is_active", true),
+        supabase.from("customers").select("full_name").eq("user_id", session.userId).maybeSingle(),
+      ]);
+      const token = account?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
+      if (token) {
+        const messages = buildNewTripRequestMessage({
+          customerName: customer?.full_name ?? session.displayName ?? null,
+          requestedDate: parsed.data.requested_date,
+          targetSpecies: parsed.data.target_species ?? null,
+          message: parsed.data.message ?? null,
+        });
+        for (const captain of captains ?? []) {
+          if (captain.line_user_id) {
+            await sendPushMessage(token, captain.line_user_id, messages);
+          }
+        }
+      }
+    } catch (notifyErr) {
+      console.error("[trip-requests] 船長通知失敗:", notifyErr);
+    }
 
     return NextResponse.json({ request: data }, { status: 201 });
   } catch (err) {

@@ -14,6 +14,7 @@ import {
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { appendReservationToSheet, resolveSheetsCreds } from "@/lib/google-sheets";
 import { syncTripCalendarCounts } from "@/lib/calendar-sync";
+import { sendPushMessage, buildNewReservationMessage } from "@/lib/line-messaging";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
@@ -217,6 +218,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
     } catch (syncErr) {
       console.error("[reservations] 同期エラー:", syncErr);
+    }
+
+    // 船長・スタッフに LINE 通知（失敗しても続行）
+    try {
+      const supabase2 = createServerSupabaseClient();
+      const [{ data: account }, { data: captains }, { data: tripForNotify }, { data: custForNotify }] = await Promise.all([
+        supabase2.from("accounts").select("line_channel_access_token").eq("id", session.accountId).maybeSingle(),
+        supabase2.from("users").select("line_user_id").eq("account_id", session.accountId).in("role", ["captain", "staff", "admin", "operator"]).eq("is_active", true),
+        supabase2.from("trips").select("trip_date, target_species").eq("id", parsed.data.trip_id).maybeSingle(),
+        supabase2.from("customers").select("full_name").eq("user_id", session.userId).maybeSingle(),
+      ]);
+      const token = account?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
+      if (token && tripForNotify) {
+        const messages = buildNewReservationMessage({
+          customerName: custForNotify?.full_name ?? session.displayName ?? null,
+          tripDate: tripForNotify.trip_date,
+          targetSpecies: tripForNotify.target_species ?? null,
+          passengersCount: parsed.data.passengers_count,
+          reservationCode: reservation.reservation_code,
+          isWaitlist: isWaitlist,
+        });
+        for (const captain of captains ?? []) {
+          if (captain.line_user_id) {
+            await sendPushMessage(token, captain.line_user_id, messages);
+          }
+        }
+      }
+    } catch (notifyErr) {
+      console.error("[reservations] 船長通知失敗:", notifyErr);
     }
 
     return NextResponse.json({ reservation }, { status: 201 });
