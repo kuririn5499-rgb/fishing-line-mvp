@@ -37,6 +37,25 @@ export async function GET(req: NextRequest) {
 
   const token = account.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
 
+  // トークンがどのボット（チャンネル）のものか確認
+  let bot_info: Record<string, unknown> | null = null;
+  let bot_info_error: string | null = null;
+  if (token) {
+    try {
+      const r = await fetch("https://api.line.me/v2/bot/info", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.ok) {
+        const j = await r.json();
+        bot_info = { displayName: j.displayName, userId: j.userId, pictureUrl: j.pictureUrl };
+      } else {
+        bot_info_error = `${r.status} ${await r.text()}`;
+      }
+    } catch (e) {
+      bot_info_error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
   // 各船長の line_user_id が Messaging API で有効か確認
   const captainChecks = await Promise.all(
     (captains ?? []).map(async (u) => {
@@ -74,6 +93,8 @@ export async function GET(req: NextRequest) {
       token_preview: token ? `${token.slice(0, 6)}...${token.slice(-4)}` : null,
       using_fallback_env: !account.line_channel_access_token && !!process.env.LINE_CHANNEL_ACCESS_TOKEN,
     },
+    bot_info,
+    bot_info_error,
     captains: captainChecks,
     captains_with_line_id: (captains ?? []).filter((u) => u.line_user_id && u.is_active).length,
   });
