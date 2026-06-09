@@ -37,8 +37,8 @@ export async function getSession(): Promise<SessionUser | null> {
   if (!raw) return null;
   try {
     const session = JSON.parse(raw) as SessionUser;
-    // 古いセッション（displayName または accountSlug 未設定）は再認証させる
-    if (!session.displayName || !session.accountSlug) return null;
+    // accountSlug がないセッションは再認証させる（displayName は任意）
+    if (!session.accountSlug) return null;
     return session;
   } catch {
     return null;

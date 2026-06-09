@@ -2,8 +2,6 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { LiffGate } from "@/components/LiffGate";
-import { CaptainSessionGuard } from "@/components/CaptainSessionGuard";
-import { AccountMismatchGuard } from "@/components/captain/AccountMismatchGuard";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
@@ -31,14 +29,8 @@ export const viewport: Viewport = {
 
 export default async function CaptainLayout({ children }: { children: ReactNode }) {
   const session = await getSession();
-
-  // customer が誤って captain URL に来た場合
-  if (session?.role === "customer") redirect("/customer");
-
   const supabase = createServerSupabaseClient();
 
-  // セッションなし → LIFF 初期化（?a=slug はミドルウェアがセッションを除去済み）
-  // LiffGate が URL の ?a= または localStorage から正しいアカウントを解決する
   if (!session) {
     const slug = process.env.ACCOUNT_SLUG ?? "demo";
     const { data: account } = await supabase
@@ -59,18 +51,10 @@ export default async function CaptainLayout({ children }: { children: ReactNode 
     );
   }
 
-  const allowedRoles = ["captain", "staff", "admin", "operator"];
-  if (!allowedRoles.includes(session.role)) redirect("/customer");
-
-  const { data: accountInfo } = await supabase
-    .from("accounts")
-    .select("liff_id_captain, slug")
-    .eq("id", session.accountId)
-    .maybeSingle();
-
-  const captainLiffId =
-    accountInfo?.liff_id_captain ?? process.env.NEXT_PUBLIC_LIFF_ID_CAPTAIN ?? "";
-  const accountSlug = accountInfo?.slug ?? process.env.ACCOUNT_SLUG ?? "";
+  // 一般ユーザーが /captain に来た場合
+  if (session.role === "customer") {
+    redirect(`/customer?a=${encodeURIComponent(session.accountSlug)}`);
+  }
 
   return (
     <AppShell
@@ -81,11 +65,6 @@ export default async function CaptainLayout({ children }: { children: ReactNode 
       title="船長ダッシュボード"
       showLogout
     >
-      <AccountMismatchGuard accountSlug={accountSlug} captainLiffId={captainLiffId} />
-      <CaptainSessionGuard
-        sessionLineUserId={session.lineUserId}
-        captainLiffId={captainLiffId}
-      />
       {children}
     </AppShell>
   );

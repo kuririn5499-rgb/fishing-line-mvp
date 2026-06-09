@@ -2,61 +2,25 @@
 
 import { useEffect } from "react";
 
+/**
+ * URL の ?a= とセッションのアカウントが違う場合にセッションを削除してリロード。
+ * ミドルウェアが先に処理するので、ここに到達するケースは稀だが念のため。
+ */
 export function CustomerAccountMismatchGuard({
   accountSlug,
-  customerLiffId,
+  customerLiffId: _customerLiffId,
 }: {
   accountSlug: string;
   customerLiffId: string;
 }) {
   useEffect(() => {
-    async function check() {
-      // 方法1: URL の ?a= とセッションのスラッグを比較（高速）
-      const urlSlug = new URLSearchParams(window.location.search).get("a");
-      if (urlSlug && urlSlug !== accountSlug) {
-        await fetch("/api/auth", { method: "DELETE" });
-        window.location.reload();
-        return;
-      }
-
-      // 方法2: LINE ブラウザ内での初回アクセス判定
-      const isLineBrowser = /Line\//i.test(navigator.userAgent);
-      if (isLineBrowser) {
-        const initialized = sessionStorage.getItem("liff_app_initialized");
-        if (!initialized) {
-          sessionStorage.setItem("liff_app_initialized", "1");
-          await fetch("/api/auth", { method: "DELETE" });
-          window.location.reload();
-          return;
-        }
-      }
-
-      // 方法3: JWT aud チェック
-      if (!customerLiffId || !isLineBrowser) return;
-      try {
-        const liff = (await import("@line/liff")).default;
-        await liff.init({ liffId: customerLiffId });
-
-        const idToken = liff.getIDToken();
-        if (!idToken) return;
-
-        const b64 = idToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-        const payload = JSON.parse(atob(b64)) as { aud?: string | string[] };
-        const aud = payload.aud;
-        const actualChannelId = Array.isArray(aud) ? aud[0] : aud;
-        const expectedChannelId = customerLiffId.split("-")[0];
-
-        if (actualChannelId && actualChannelId !== expectedChannelId) {
-          await fetch("/api/auth", { method: "DELETE" });
-          window.location.reload();
-        }
-      } catch {
-        await fetch("/api/auth", { method: "DELETE" });
-        window.location.reload();
-      }
+    const urlSlug = new URLSearchParams(window.location.search).get("a");
+    if (urlSlug && urlSlug !== accountSlug) {
+      fetch("/api/auth", { method: "DELETE" }).then(() =>
+        window.location.reload()
+      );
     }
-    check();
-  }, [accountSlug, customerLiffId]);
+  }, [accountSlug]);
 
   return null;
 }
