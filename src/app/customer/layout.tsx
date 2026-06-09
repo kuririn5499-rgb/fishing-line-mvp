@@ -40,6 +40,7 @@ export default async function CustomerLayout({ children }: { children: ReactNode
       navType="customer"
       displayName={session.displayName}
       pictureUrl={session.pictureUrl}
+      showLogout
     >
       {children}
     </AppShell>
