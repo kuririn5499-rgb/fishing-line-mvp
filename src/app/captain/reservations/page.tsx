@@ -10,6 +10,7 @@ import { ReservationStatusBadge } from "@/components/ui/StatusBadge";
 import { ManualReservationForm } from "@/components/forms/ManualReservationForm";
 import { CancelReservationButton } from "@/components/forms/CancelReservationButton";
 import { ReplyButton } from "@/components/forms/ReplyButton";
+import { MarkReservationsAsRead } from "./MarkReservationsAsRead";
 
 export default async function CaptainReservationsPage() {
   const session = await getSession();
@@ -20,6 +21,14 @@ export default async function CaptainReservationsPage() {
 
   const until = new Date();
   until.setDate(until.getDate() + 30);
+
+  // 最終既読時刻
+  const { data: accountData } = await supabase
+    .from("accounts")
+    .select("last_read_reservations_at")
+    .eq("id", session.accountId)
+    .maybeSingle();
+  const lastReadAt = accountData?.last_read_reservations_at ?? null;
 
   const { data: trips } = await supabase
     .from("trips")
@@ -52,6 +61,7 @@ export default async function CaptainReservationsPage() {
       memo,
       coupon_id,
       discount_amount,
+      created_at,
       trips(id, trip_date, departure_time, target_species, price_per_person, boats(name)),
       customers(full_name, phone)
     `)
@@ -100,6 +110,7 @@ export default async function CaptainReservationsPage() {
 
   return (
     <div className="space-y-4">
+      <MarkReservationsAsRead />
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold text-gray-800">予約管理</h1>
         <a
@@ -168,6 +179,12 @@ export default async function CaptainReservationsPage() {
                             <ReservationStatusBadge
                               status={r.status as "pending" | "confirmed" | "waitlist" | "cancelled" | "completed"}
                             />
+                            {/* NEW バッジ */}
+                            {lastReadAt === null || (r as { created_at?: string }).created_at! > lastReadAt ? (
+                              <span className="text-[10px] font-bold text-white bg-red-500 rounded-full px-1.5 py-0.5 leading-none">
+                                NEW
+                              </span>
+                            ) : null}
                             {/* 氏名 */}
                             <span className="text-sm font-medium text-gray-800">
                               {customer?.full_name ?? "（氏名未登録）"}

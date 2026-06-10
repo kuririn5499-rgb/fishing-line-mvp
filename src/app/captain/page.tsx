@@ -25,7 +25,7 @@ export default async function CaptainDashboardPage() {
   const [{ data: accountInfo }, { data: todayTrips }, { data: upcomingTrips }, { count: pendingRedemptions }, { count: pendingRequests }] = await Promise.all([
     supabase
       .from("accounts")
-      .select("name, boat_name")
+      .select("name, boat_name, last_read_reservations_at")
       .eq("id", session.accountId)
       .maybeSingle(),
     supabase
@@ -81,6 +81,15 @@ export default async function CaptainDashboardPage() {
       t.status === "completed" &&
       !((t.duty_logs as unknown[])?.length > 0)
   );
+
+  // 未読予約数（last_read_reservations_at 以降に作成された予約）
+  const lastReadAt = accountInfo?.last_read_reservations_at ?? null;
+  const { count: unreadReservations } = await supabase
+    .from("reservations")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", session.accountId)
+    .neq("status", "cancelled")
+    .gt("created_at", lastReadAt ?? "1970-01-01T00:00:00Z");
 
   // 予約IDを1回だけ取得してカウントと名簿検索に共用
   const tripIdList = trips.map((t) => t.id);
@@ -238,9 +247,14 @@ export default async function CaptainDashboardPage() {
       {/* クイックリンク */}
       <div className="grid grid-cols-2 gap-3">
         <Link href="/captain/reservations">
-          <Card className="flex items-center gap-3 hover:shadow-md transition-shadow">
+          <Card className="flex items-center gap-3 hover:shadow-md transition-shadow relative">
             <span className="text-2xl">📋</span>
             <span className="text-sm font-medium">予約一覧</span>
+            {(unreadReservations ?? 0) > 0 && (
+              <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
+                {(unreadReservations ?? 0) > 99 ? "99+" : unreadReservations}
+              </span>
+            )}
           </Card>
         </Link>
         <Link href="/captain/fishing-report">
