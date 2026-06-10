@@ -253,16 +253,16 @@ export default async function CaptainStatsPage() {
           <Card>
             <p className="text-xs text-gray-400 mb-3">累計 {segTotal}名</p>
             {[
-              { label: "新規", sub: "1回", count: segNew,    color: "bg-sky-400" },
-              { label: "リピーター", sub: "2〜4回", count: segRepeat,  color: "bg-brand-400" },
-              { label: "常連",  sub: "5回以上", count: segRegular, color: "bg-amber-400" },
-            ].map(({ label, sub, count, color }) => {
+              { label: "新規",     sub: "1回",   count: segNew,     hex: "#38bdf8" },
+              { label: "リピーター", sub: "2〜4回", count: segRepeat,  hex: "#4ade80" },
+              { label: "常連",     sub: "5回以上", count: segRegular, hex: "#fbbf24" },
+            ].map(({ label, sub, count, hex }) => {
               const pct = segTotal > 0 ? Math.round((count / segTotal) * 100) : 0;
               return (
                 <div key={label} className="mb-3 last:mb-0">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1.5">
-                      <span className={`inline-block w-2 h-2 rounded-full ${color}`} />
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: hex }} />
                       <span className="text-sm font-medium text-gray-700">{label}</span>
                       <span className="text-xs text-gray-400">{sub}</span>
                     </div>
@@ -272,8 +272,8 @@ export default async function CaptainStatsPage() {
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-2">
                     <div
-                      className={`${color} h-2 rounded-full transition-all`}
-                      style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%` }}
+                      className="h-2 rounded-full transition-all"
+                      style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%`, backgroundColor: hex }}
                     />
                   </div>
                 </div>
