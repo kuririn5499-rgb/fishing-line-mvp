@@ -73,7 +73,7 @@ export async function POST(
     // アカウント情報取得（LINE token + Google Calendar + boat_name）
     const { data: account } = await supabase
       .from("accounts")
-      .select("name, boat_name, line_channel_access_token, liff_id_customer, google_calendar_id, google_service_account_email, google_service_account_private_key")
+      .select("name, boat_name, line_channel_access_token, liff_id_customer, google_calendar_id, google_service_account_email, google_service_account_private_key, notify_line_request_approved")
       .eq("id", session.accountId)
       .maybeSingle();
 
@@ -104,7 +104,7 @@ export async function POST(
     const lineToken = account?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
     const liffId = account?.liff_id_customer ?? process.env.NEXT_PUBLIC_LIFF_ID_CUSTOMER ?? "";
 
-    if (lineUserId && lineToken) {
+    if (lineUserId && lineToken && (account?.notify_line_request_approved ?? true)) {
       try {
         const boatName = account?.boat_name ?? account?.name ?? "船長";
         const liffUrl = liffId ? `https://liff.line.me/${liffId}` : "";

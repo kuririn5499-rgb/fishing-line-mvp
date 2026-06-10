@@ -59,11 +59,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   for (const [accountId, accountTrips] of byAccount) {
     const { data: account } = await supabase
       .from("accounts")
-      .select("name, boat_name, line_channel_access_token, liff_id_customer")
+      .select("name, boat_name, line_channel_access_token, liff_id_customer, notify_line_reminder")
       .eq("id", accountId)
       .maybeSingle();
 
-    if (!account?.line_channel_access_token) continue;
+    if (!account?.line_channel_access_token || !(account.notify_line_reminder ?? true)) continue;
 
     const token = account.line_channel_access_token;
     const boatName = account.boat_name ?? account.name ?? "船長";

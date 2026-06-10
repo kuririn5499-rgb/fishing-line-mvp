@@ -51,12 +51,12 @@ export async function processWaitlist(tripId: string): Promise<void> {
   try {
     const { data: account } = await supabase
       .from("accounts")
-      .select("name, boat_name, line_channel_access_token")
+      .select("name, boat_name, line_channel_access_token, notify_line_waitlist")
       .eq("id", trip.account_id)
       .maybeSingle();
 
     const token = account?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN;
-    if (!token) return;
+    if (!token || !(account?.notify_line_waitlist ?? true)) return;
 
     const { data: customer } = await supabase
       .from("customers")

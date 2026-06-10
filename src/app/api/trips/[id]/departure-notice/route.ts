@@ -130,13 +130,14 @@ export async function POST(
     // アカウントの LINE トークンを取得（DB 優先、env fallback）
     const { data: accountData } = await supabase
       .from("accounts")
-      .select("line_channel_access_token")
+      .select("line_channel_access_token, notify_line_departure")
       .eq("id", trip.account_id)
       .single();
 
     const token = accountData?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
+    const notifyEnabled = accountData?.notify_line_departure ?? true;
     let sentCount = 0;
-    for (const lineUserId of lineUserIds) {
+    for (const lineUserId of lineUserIds.filter(() => notifyEnabled)) {
       try {
         await sendPushMessage(token, lineUserId, [
           { type: "text", text: messageText },

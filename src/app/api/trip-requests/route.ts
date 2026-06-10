@@ -61,12 +61,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // 船長・スタッフに LINE 通知（失敗しても続行）
     try {
       const [{ data: account }, { data: captains }, { data: customer }] = await Promise.all([
-        supabase.from("accounts").select("line_channel_access_token").eq("id", session.accountId).maybeSingle(),
+        supabase.from("accounts").select("line_channel_access_token, notify_line_trip_request").eq("id", session.accountId).maybeSingle(),
         supabase.from("users").select("line_user_id").eq("account_id", session.accountId).in("role", ["captain", "staff", "admin", "operator"]).eq("is_active", true),
         supabase.from("customers").select("full_name").eq("user_id", session.userId).maybeSingle(),
       ]);
       const token = account?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
-      if (token) {
+      if (token && (account?.notify_line_trip_request ?? true)) {
         const messages = buildNewTripRequestMessage({
           customerName: customer?.full_name ?? session.displayName ?? null,
           requestedDate: parsed.data.requested_date,

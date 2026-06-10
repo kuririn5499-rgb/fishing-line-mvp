@@ -94,6 +94,17 @@ export default async function CustomerHomePage() {
     .eq("id", session.accountId)
     .maybeSingle();
 
+  // 直近7日の出船通知
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: departureNotices } = await supabase
+    .from("message_logs")
+    .select("id, body, sent_at")
+    .eq("account_id", session.accountId)
+    .eq("message_type", "departure_notice")
+    .gte("sent_at", sevenDaysAgo)
+    .order("sent_at", { ascending: false })
+    .limit(5);
+
   const featurePoints = account?.feature_points ?? true;
   const featureCoupon = account?.feature_coupon ?? true;
 
@@ -241,6 +252,33 @@ export default async function CustomerHomePage() {
                     </div>
                   </Card>
                 </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* 出船通知 */}
+      {(departureNotices ?? []).length > 0 && (
+        <section>
+          <h2 className="text-sm font-bold text-gray-700 mb-2">出船通知</h2>
+          <div className="space-y-2">
+            {(departureNotices ?? []).map((notice) => {
+              const isGo = notice.body?.includes("出船します");
+              return (
+                <Card key={notice.id}>
+                  <div className="flex items-start gap-3">
+                    <span className="text-xl shrink-0">{isGo ? "🚢" : "⚠️"}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap break-all leading-relaxed">
+                        {notice.body}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {new Date(notice.sent_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
               );
             })}
           </div>

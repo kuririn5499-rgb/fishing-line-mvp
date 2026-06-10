@@ -75,6 +75,14 @@ interface Account {
   google_spreadsheet_id: string | null;
   google_service_account_email: string | null;
   google_service_account_private_key: string | null;
+  notify_line_new_reservation: boolean;
+  notify_line_cancellation: boolean;
+  notify_line_trip_request: boolean;
+  notify_line_request_approved: boolean;
+  notify_line_reminder: boolean;
+  notify_line_departure: boolean;
+  notify_line_waitlist: boolean;
+  notify_line_point_redemption: boolean;
 }
 
 interface Boat {
@@ -285,6 +293,33 @@ export default function EditAccountPage() {
         ).map(({ key, label }) => (
           <div key={key} className="flex items-center justify-between">
             <label className="text-sm font-medium text-gray-700">{label}</label>
+            <button
+              type="button"
+              onClick={() => set(key, !(form[key] ?? true))}
+              className={`px-4 py-1.5 rounded-xl text-xs font-medium ${(form[key] ?? true) ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-400"}`}
+            >
+              {(form[key] ?? true) ? "ON" : "OFF"}
+            </button>
+          </div>
+        ))}
+
+        <hr className="border-gray-100" />
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">LINE通知設定（Push）</p>
+        <p className="text-xs text-gray-400">OFFにするとLINEの通数を消費しません。アプリ内表示には影響しません。</p>
+        {(
+          [
+            { key: "notify_line_new_reservation",  label: "新規予約通知（→船長）" },
+            { key: "notify_line_cancellation",      label: "キャンセル通知（→船長）" },
+            { key: "notify_line_trip_request",      label: "便リクエスト通知（→船長）" },
+            { key: "notify_line_request_approved",  label: "リクエスト承認通知（→顧客）" },
+            { key: "notify_line_reminder",          label: "乗船リマインダー（→顧客）" },
+            { key: "notify_line_departure",         label: "出船通知（→顧客）" },
+            { key: "notify_line_waitlist",          label: "キャンセル待ち繰り上がり（→顧客）" },
+            { key: "notify_line_point_redemption",  label: "ポイント申請通知（→船長）" },
+          ] as { key: keyof Account; label: string }[]
+        ).map(({ key, label }) => (
+          <div key={key} className="flex items-center justify-between">
+            <label className="text-sm text-gray-700">{label}</label>
             <button
               type="button"
               onClick={() => set(key, !(form[key] ?? true))}
