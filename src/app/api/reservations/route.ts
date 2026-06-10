@@ -224,13 +224,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
       const supabase2 = createServerSupabaseClient();
       const [{ data: account }, { data: captains }, { data: tripForNotify }, { data: custForNotify }] = await Promise.all([
-        supabase2.from("accounts").select("line_channel_access_token, notify_line_new_reservation").eq("id", session.accountId).maybeSingle(),
+        supabase2.from("accounts").select("line_channel_access_token").eq("id", session.accountId).maybeSingle(),
         supabase2.from("users").select("line_user_id").eq("account_id", session.accountId).in("role", ["captain", "staff", "admin", "operator"]).eq("is_active", true),
         supabase2.from("trips").select("trip_date, target_species").eq("id", parsed.data.trip_id).maybeSingle(),
         supabase2.from("customers").select("full_name").eq("user_id", session.userId).maybeSingle(),
       ]);
       const token = account?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
-      if (token && tripForNotify && (account?.notify_line_new_reservation ?? true)) {
+      const { data: nf1 } = await supabase2.from("accounts").select("notify_line_new_reservation").eq("id", session.accountId).maybeSingle();
+      const notifyEnabled = (nf1 as { notify_line_new_reservation?: boolean } | null)?.notify_line_new_reservation !== false;
+      if (token && tripForNotify && notifyEnabled) {
         const messages = buildNewReservationMessage({
           customerName: custForNotify?.full_name ?? session.displayName ?? null,
           tripDate: tripForNotify.trip_date,

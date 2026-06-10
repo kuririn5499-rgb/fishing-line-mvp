@@ -90,13 +90,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
       const { data: account } = await supabase
         .from("accounts")
-        .select("name, line_channel_access_token, notify_line_point_redemption")
+        .select("name, line_channel_access_token")
         .eq("id", session.accountId)
         .maybeSingle();
 
       const token = account?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN;
 
-      if (token && (account?.notify_line_point_redemption ?? true)) {
+      const { data: nfPt } = await supabase.from("accounts").select("notify_line_point_redemption").eq("id", session.accountId).maybeSingle();
+      if (token && (nfPt as { notify_line_point_redemption?: boolean } | null)?.notify_line_point_redemption !== false) {
         const { data: captains } = await supabase
           .from("users")
           .select("line_user_id")

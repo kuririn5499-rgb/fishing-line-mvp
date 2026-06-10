@@ -23,7 +23,7 @@ export async function POST(
     // アカウントの機能フラグを確認
     const { data: account } = await supabase
       .from("accounts")
-      .select("name, boat_name, line_channel_access_token, feature_customer_cancel, notify_line_cancellation")
+      .select("name, boat_name, line_channel_access_token, feature_customer_cancel")
       .eq("id", session.accountId)
       .maybeSingle();
 
@@ -75,7 +75,8 @@ export async function POST(
     // 船長への LINE 通知（失敗しても続行）
     try {
       const token = account.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
-      if (token && (account.notify_line_cancellation ?? true)) {
+      const { data: nfCancel } = await supabase.from("accounts").select("notify_line_cancellation").eq("id", session.accountId).maybeSingle();
+      if (token && (nfCancel as { notify_line_cancellation?: boolean } | null)?.notify_line_cancellation !== false) {
         const { data: captainUsers } = await supabase
           .from("users")
           .select("line_user_id")
