@@ -28,12 +28,20 @@ export default async function CustomerHomePage() {
     .order("departure_time", { ascending: true })
     .limit(5);
 
-  // 自分の顧客レコード（ポイント + id + 氏名）
+  // 自分の顧客レコード（ポイント + id + 氏名 + 最終既読時刻）
   const { data: customer } = await supabase
     .from("customers")
-    .select("id, points, full_name")
+    .select("id, points, full_name, last_read_reports_at")
     .eq("user_id", session.userId)
     .maybeSingle();
+
+  // 未読の釣果・お知らせ件数
+  const { count: unreadReports } = await supabase
+    .from("message_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", session.accountId)
+    .in("message_type", ["fishing_report", "announcement"])
+    .gt("sent_at", customer?.last_read_reports_at ?? "1970-01-01T00:00:00Z");
 
   // 表示名: LINE名を優先し、未設定の場合のみ customers.full_name を使用
   const displayName = session.displayName || customer?.full_name || null;
@@ -138,15 +146,22 @@ export default async function CustomerHomePage() {
       {/* クイックアクション */}
       <div className="grid grid-cols-2 gap-3">
         {[
-          { href: "/customer/reservations", icon: "📅", label: "予約する" },
-          { href: "/customer/request",      icon: "🙋", label: "便をリクエスト" },
-          { href: "/customer/manifest",     icon: "📋", label: "乗船名簿" },
-          { href: "/customer/reports",      icon: "🐟", label: "釣果・お知らせ" },
-          ...(featureCoupon ? [{ href: "/customer/coupons", icon: "🎟️", label: "クーポン" }] : []),
+          { href: "/customer/reservations", icon: "📅", label: "予約する",        badge: 0 },
+          { href: "/customer/request",      icon: "🙋", label: "便をリクエスト",  badge: 0 },
+          { href: "/customer/manifest",     icon: "📋", label: "乗船名簿",        badge: 0 },
+          { href: "/customer/reports",      icon: "🐟", label: "釣果・お知らせ",  badge: unreadReports ?? 0 },
+          ...(featureCoupon ? [{ href: "/customer/coupons", icon: "🎟️", label: "クーポン", badge: 0 }] : []),
         ].map((item) => (
           <Link key={item.href} href={item.href}>
             <Card className="flex flex-col items-center justify-center gap-2 h-24 text-center hover:shadow-md transition-shadow">
-              <span className="text-3xl">{item.icon}</span>
+              <span className="text-3xl relative inline-block">
+                {item.icon}
+                {item.badge > 0 && (
+                  <span className="absolute -top-1 -right-3 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                    {item.badge > 99 ? "99+" : item.badge}
+                  </span>
+                )}
+              </span>
               <span className="text-sm font-medium text-gray-700">{item.label}</span>
             </Card>
           </Link>
