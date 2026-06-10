@@ -66,6 +66,27 @@ export default async function CaptainStatsPage() {
   const fromStr = from.toISOString().slice(0, 10);
   const todayStr = now.toISOString().slice(0, 10);
 
+  // 顧客セグメント（全期間）
+  const { data: allReservations } = await supabase
+    .from("reservations")
+    .select("customer_id")
+    .eq("account_id", session.accountId)
+    .neq("status", "cancelled")
+    .not("customer_id", "is", null);
+
+  const customerCounts = new Map<string, number>();
+  for (const r of allReservations ?? []) {
+    const cid = r.customer_id as string;
+    customerCounts.set(cid, (customerCounts.get(cid) ?? 0) + 1);
+  }
+  let segNew = 0, segRepeat = 0, segRegular = 0;
+  for (const count of customerCounts.values()) {
+    if (count === 1) segNew++;
+    else if (count <= 4) segRepeat++;
+    else segRegular++;
+  }
+  const segTotal = customerCounts.size;
+
   // 便一覧（過去6ヶ月）
   const { data: trips } = await supabase
     .from("trips")
@@ -224,6 +245,43 @@ export default async function CaptainStatsPage() {
           </div>
         </Card>
       </section>
+
+      {/* 顧客セグメント */}
+      {segTotal > 0 && (
+        <section>
+          <h2 className="text-sm font-bold text-gray-600 mb-2">顧客セグメント（全期間）</h2>
+          <Card>
+            <p className="text-xs text-gray-400 mb-3">累計 {segTotal}名</p>
+            {[
+              { label: "新規", sub: "1回", count: segNew,    color: "bg-sky-400" },
+              { label: "リピーター", sub: "2〜4回", count: segRepeat,  color: "bg-brand-400" },
+              { label: "常連",  sub: "5回以上", count: segRegular, color: "bg-amber-400" },
+            ].map(({ label, sub, count, color }) => {
+              const pct = segTotal > 0 ? Math.round((count / segTotal) * 100) : 0;
+              return (
+                <div key={label} className="mb-3 last:mb-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`inline-block w-2 h-2 rounded-full ${color}`} />
+                      <span className="text-sm font-medium text-gray-700">{label}</span>
+                      <span className="text-xs text-gray-400">{sub}</span>
+                    </div>
+                    <span className="text-sm font-bold text-gray-800">{count}名
+                      <span className="text-xs font-normal text-gray-400 ml-1">（{pct}%）</span>
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2">
+                    <div
+                      className={`${color} h-2 rounded-full transition-all`}
+                      style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
+        </section>
+      )}
 
       {/* 月別グラフ：売上 */}
       {total.revenue > 0 && (
