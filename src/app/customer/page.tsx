@@ -126,7 +126,10 @@ export default async function CustomerHomePage() {
         .gte("checked_at", sevenDaysAgoDate + "T00:00:00Z")
         .order("checked_at", { ascending: false })
         .limit(5);
-      departureNotices = (checks ?? []) as typeof departureNotices;
+      departureNotices = (checks ?? []).map((c) => ({
+        ...c,
+        trips: Array.isArray(c.trips) ? (c.trips[0] ?? null) : (c.trips as typeof departureNotices[number]["trips"]),
+      })) as typeof departureNotices;
     }
   }
 
