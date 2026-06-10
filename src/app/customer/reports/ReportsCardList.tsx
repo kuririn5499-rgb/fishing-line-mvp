@@ -97,7 +97,8 @@ export function ReportsCardList({ logs, logImages }: ReportsCardListProps) {
       {/* ライトボックス */}
       {lightbox && (
         <div
-          className="lb-overlay fixed inset-0 z-50 bg-black/88 flex items-center justify-center"
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
           onClick={close}
         >
           {/* 左矢印 ＋ 画像 ＋ 右矢印 を横並びで配置 */}
