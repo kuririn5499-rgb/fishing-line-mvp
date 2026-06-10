@@ -247,6 +247,7 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
         ref={fileInputRef}
         type="file"
         accept="image/jpeg,image/png,image/gif,image/webp"
+        multiple
         onChange={handleFileChange}
         className="hidden"
       />
