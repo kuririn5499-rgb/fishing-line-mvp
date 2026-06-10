@@ -10,6 +10,16 @@ export default async function CustomerReportsPage() {
 
   const supabase = createServerSupabaseClient();
 
+  // 最終既読時刻を取得
+  const { data: customerData } = await supabase
+    .from("customers")
+    .select("last_read_reports_at")
+    .eq("user_id", session.userId)
+    .eq("account_id", session.accountId)
+    .maybeSingle();
+
+  const lastReadAt = customerData?.last_read_reports_at ?? null;
+
   const { data: logs } = await supabase
     .from("message_logs")
     .select("id, message_type, title, body, sent_at, image_urls")
@@ -18,11 +28,14 @@ export default async function CustomerReportsPage() {
     .order("sent_at", { ascending: false })
     .limit(30);
 
-  // image_urls を DB から直接使用（Storage フォルダ取得は廃止）
   const logImages: Record<string, string[]> = {};
+  const unreadIds = new Set<string>();
   for (const log of logs ?? []) {
     if (log.image_urls?.length) {
       logImages[log.id] = log.image_urls;
+    }
+    if (!lastReadAt || log.sent_at > lastReadAt) {
+      unreadIds.add(log.id);
     }
   }
 
@@ -38,7 +51,11 @@ export default async function CustomerReportsPage() {
           </p>
         </Card>
       ) : (
-        <ReportsCardList logs={logs} logImages={logImages} />
+        <ReportsCardList
+          logs={logs}
+          logImages={logImages}
+          unreadIds={Array.from(unreadIds)}
+        />
       )}
     </div>
   );

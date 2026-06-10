@@ -34,28 +34,12 @@ export default async function CustomerLayout({ children }: { children: ReactNode
     redirect(`/captain?a=${encodeURIComponent(session.accountSlug)}`);
   }
 
-  // 未読の釣果・お知らせ件数を取得
-  const { data: customerData } = await supabase
-    .from("customers")
-    .select("last_read_reports_at")
-    .eq("user_id", session.userId)
-    .eq("account_id", session.accountId)
-    .maybeSingle();
-
-  const { count: unreadReports } = await supabase
-    .from("message_logs")
-    .select("id", { count: "exact", head: true })
-    .eq("account_id", session.accountId)
-    .in("message_type", ["fishing_report", "announcement"])
-    .gt("sent_at", customerData?.last_read_reports_at ?? "1970-01-01T00:00:00Z");
-
   return (
     <AppShell
       role={session.role}
       navType="customer"
       displayName={session.displayName}
       pictureUrl={session.pictureUrl}
-      unreadReports={unreadReports ?? 0}
       showLogout
     >
       {children}

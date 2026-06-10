@@ -19,6 +19,7 @@ interface LightboxState {
 interface ReportsCardListProps {
   logs: LogEntry[];
   logImages: Record<string, string[]>;
+  unreadIds?: string[];
 }
 
 function formatSentAt(sentAt: string): string {
@@ -30,7 +31,8 @@ function formatSentAt(sentAt: string): string {
   return `${m}/${day} ${h}:${min}`;
 }
 
-export function ReportsCardList({ logs, logImages }: ReportsCardListProps) {
+export function ReportsCardList({ logs, logImages, unreadIds = [] }: ReportsCardListProps) {
+  const unreadSet = new Set(unreadIds);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
   const open = useCallback((urls: string[], index: number) => {
@@ -57,6 +59,7 @@ export function ReportsCardList({ logs, logImages }: ReportsCardListProps) {
       <div className="space-y-3">
         {logs.map((log) => {
           const images = logImages[log.id] ?? [];
+          const isUnread = unreadSet.has(log.id);
           return (
             <Card key={log.id}>
               <div className="space-y-2">
@@ -67,6 +70,11 @@ export function ReportsCardList({ logs, logImages }: ReportsCardListProps) {
                   <span className="text-xs font-semibold text-gray-700">
                     {log.message_type === "fishing_report" ? "釣果情報" : "お知らせ"}
                   </span>
+                  {isUnread && (
+                    <span className="text-[10px] font-bold text-white bg-red-500 rounded-full px-1.5 py-0.5 leading-none">
+                      NEW
+                    </span>
+                  )}
                   <span className="text-xs text-gray-400 ml-auto shrink-0">
                     {formatSentAt(log.sent_at)}
                   </span>

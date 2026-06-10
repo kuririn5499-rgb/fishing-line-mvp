@@ -19,7 +19,6 @@ interface AppShellProps {
   displayName?: string | null;
   pictureUrl?: string | null;
   showLogout?: boolean;
-  unreadReports?: number;
 }
 
 // =====================
@@ -62,7 +61,6 @@ export function AppShell({
   displayName,
   pictureUrl,
   showLogout = false,
-  unreadReports = 0,
 }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -139,7 +137,6 @@ export function AppShell({
           <ul className="flex max-w-lg mx-auto">
             {nav.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-              const badge = item.href === "/customer/reports" && unreadReports > 0 ? unreadReports : 0;
               return (
                 <li key={item.href} className="flex-1">
                   <Link
@@ -150,14 +147,7 @@ export function AppShell({
                       ${isActive ? "text-brand-600 font-semibold" : "text-gray-500"}
                     `}
                   >
-                    <span className="text-lg leading-none relative">
-                      {item.icon}
-                      {badge > 0 && (
-                        <span className="absolute -top-1 -right-2 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
-                          {badge > 99 ? "99+" : badge}
-                        </span>
-                      )}
-                    </span>
+                    <span className="text-lg leading-none">{item.icon}</span>
                     <span className="leading-none">{item.label}</span>
                   </Link>
                 </li>
