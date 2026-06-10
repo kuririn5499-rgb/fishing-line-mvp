@@ -40,16 +40,20 @@ interface FishingReportFormProps {
   boatName: string;
 }
 
-const MAX_IMAGES = 2;
+const MAX_IMAGES_WITH_LINE = 2;
+const MAX_IMAGES_WITHOUT_LINE = 5;
 const MAX_CHARS = 500;
 
 export function FishingReportForm({ trips }: FishingReportFormProps) {
   const [mode, setMode] = useState<Mode>("fishing_report");
+  const [notifyLine, setNotifyLine] = useState(true);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const maxImages = notifyLine ? MAX_IMAGES_WITH_LINE : MAX_IMAGES_WITHOUT_LINE;
 
   const fishingForm = useForm<FishingReportFormData>({
     resolver: zodResolver(FishingReportSchema),
@@ -78,9 +82,19 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
     announcementForm.reset();
   };
 
+  const handleNotifyLineToggle = () => {
+    const next = !notifyLine;
+    setNotifyLine(next);
+    // LINE ON に切り替え時、上限を超えている画像を削除
+    if (next && imageFiles.length > MAX_IMAGES_WITH_LINE) {
+      setImageFiles((prev) => prev.slice(0, MAX_IMAGES_WITH_LINE));
+      setPreviews((prev) => prev.slice(0, MAX_IMAGES_WITH_LINE));
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
-    const rem = MAX_IMAGES - imageFiles.length;
+    const rem = maxImages - imageFiles.length;
     const toAdd = files.slice(0, rem);
     if (fileInputRef.current) fileInputRef.current.value = "";
 
@@ -124,7 +138,12 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
       const res = await fetch("/api/fishing-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, has_vacancy: false, image_urls: imageUrls }),
+        body: JSON.stringify({
+          ...data,
+          has_vacancy: false,
+          image_urls: imageUrls,
+          notify_line: notifyLine,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "配信に失敗しました");
@@ -143,7 +162,11 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
       const res = await fetch("/api/announcement", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: data.content, image_urls: imageUrls }),
+        body: JSON.stringify({
+          content: data.content,
+          image_urls: imageUrls,
+          notify_line: notifyLine,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "配信に失敗しました");
@@ -169,9 +192,10 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
         <div className="text-5xl">
           {mode === "fishing_report" ? "🐟" : "📢"}
         </div>
-        <p className="text-lg font-bold text-green-800">送信完了しました</p>
+        <p className="text-lg font-bold text-green-800">投稿しました</p>
         <p className="text-sm text-green-700">
-          {mode === "fishing_report" ? "釣果情報" : "お知らせ"}を LINE フォロワーへ配信しました
+          {mode === "fishing_report" ? "釣果情報" : "お知らせ"}を投稿しました
+          {notifyLine ? "（LINEフォロワーへ通知済み）" : "（LINE通知なし）"}
         </p>
         <Button variant="secondary" onClick={handleReset} className="w-full">
           続けて投稿する
@@ -183,14 +207,41 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
   const statusLabel = {
     compressing: "画像を圧縮中...",
     uploading: "画像をアップロード中...",
-    sending: "配信中...",
+    sending: notifyLine ? "配信中..." : "投稿中...",
   }[status as "compressing" | "uploading" | "sending"];
+
+  // LINE通知トグル
+  const lineNotifyToggle = (
+    <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+      <div>
+        <p className="text-sm font-medium text-gray-700">LINE通知</p>
+        <p className="text-xs text-gray-400 mt-0.5">
+          {notifyLine
+            ? "全フォロワーへ通知します（写真2枚まで）"
+            : `通知なし・アプリ内のみ（写真${MAX_IMAGES_WITHOUT_LINE}枚まで）`}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={handleNotifyLineToggle}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none ${
+          notifyLine ? "bg-brand-500" : "bg-gray-300"
+        }`}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+            notifyLine ? "translate-x-6" : "translate-x-1"
+          }`}
+        />
+      </button>
+    </div>
+  );
 
   const imagePicker = (
     <div className="space-y-2">
       <p className="text-sm font-medium text-gray-700">
         {mode === "fishing_report" ? "② " : "② "}写真を選択
-        <span className="text-xs text-gray-400 ml-1">（最大{MAX_IMAGES}枚）</span>
+        <span className="text-xs text-gray-400 ml-1">（最大{maxImages}枚）</span>
       </p>
       <input
         ref={fileInputRef}
@@ -217,7 +268,7 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
             </button>
           </div>
         ))}
-        {imageFiles.length < MAX_IMAGES && (
+        {imageFiles.length < maxImages && (
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -242,6 +293,9 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
         <option value="fishing_report">🐟 釣果投稿</option>
         <option value="announcement">📢 お知らせ</option>
       </select>
+
+      {/* LINE通知トグル（共通） */}
+      {lineNotifyToggle}
 
       {/* 釣果投稿フォーム */}
       {mode === "fishing_report" && (
@@ -299,16 +353,24 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
             </div>
           </div>
 
-          <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 space-y-0.5">
-            <p className="text-xs text-blue-700">
-              📢 投稿すると LINE 公式アカウントの全フォロワーへ通知されます
-            </p>
-            {imageFiles.length > 0 && (
-              <p className="text-xs text-blue-600">
-                📷 写真 {imageFiles.length} 枚を送信します
+          {notifyLine ? (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 space-y-0.5">
+              <p className="text-xs text-blue-700">
+                📢 投稿すると LINE 公式アカウントの全フォロワーへ通知されます
               </p>
-            )}
-          </div>
+              {imageFiles.length > 0 && (
+                <p className="text-xs text-blue-600">
+                  📷 写真 {imageFiles.length} 枚を送信します
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+              <p className="text-xs text-gray-500">
+                アプリ内のみ投稿します（LINE通知なし）
+              </p>
+            </div>
+          )}
 
           {errorMsg && (
             <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
@@ -323,7 +385,7 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
             className="w-full"
             disabled={isLoading}
           >
-            {statusLabel ?? "釣果を配信する"}
+            {statusLabel ?? (notifyLine ? "釣果を配信する" : "釣果を投稿する")}
           </Button>
         </form>
       )}
@@ -364,16 +426,24 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
             {imagePicker}
           </div>
 
-          <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 space-y-0.5">
-            <p className="text-xs text-blue-700">
-              📢 送信すると LINE 公式アカウントの全フォロワーへ通知されます
-            </p>
-            {imageFiles.length > 0 && (
-              <p className="text-xs text-blue-600">
-                📷 写真 {imageFiles.length} 枚を送信します
+          {notifyLine ? (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 space-y-0.5">
+              <p className="text-xs text-blue-700">
+                📢 送信すると LINE 公式アカウントの全フォロワーへ通知されます
               </p>
-            )}
-          </div>
+              {imageFiles.length > 0 && (
+                <p className="text-xs text-blue-600">
+                  📷 写真 {imageFiles.length} 枚を送信します
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+              <p className="text-xs text-gray-500">
+                アプリ内のみ投稿します（LINE通知なし）
+              </p>
+            </div>
+          )}
 
           {errorMsg && (
             <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
@@ -388,7 +458,7 @@ export function FishingReportForm({ trips }: FishingReportFormProps) {
             className="w-full"
             disabled={isLoading}
           >
-            {statusLabel ?? "お知らせを配信する"}
+            {statusLabel ?? (notifyLine ? "お知らせを配信する" : "お知らせを投稿する")}
           </Button>
         </form>
       )}

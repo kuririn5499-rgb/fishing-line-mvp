@@ -7,6 +7,7 @@
 import { getSession } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
+import { MarkReportsAsRead } from "./MarkReportsAsRead";
 
 function formatSentAt(sentAt: string): string {
   const d = new Date(sentAt);
@@ -84,6 +85,7 @@ export default async function CustomerReportsPage() {
 
   return (
     <div className="space-y-4">
+      <MarkReportsAsRead />
       <h1 className="text-lg font-bold text-gray-800">釣果・お知らせ</h1>
 
       {!logs || logs.length === 0 ? (

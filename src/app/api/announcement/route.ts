@@ -11,7 +11,8 @@ import { z } from "zod";
 
 const Schema = z.object({
   content: z.string().min(1).max(500),
-  image_urls: z.array(z.string().url()).max(2).optional(),
+  notify_line: z.boolean().default(true),
+  image_urls: z.array(z.string().url()).max(5).optional(),
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { content, image_urls } = parsed.data;
+    const { content, notify_line, image_urls } = parsed.data;
     const supabase = createServerSupabaseClient();
 
     await supabase.from("message_logs").insert({
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       message_type: "announcement",
       title: "お知らせ",
       body: content,
+      image_urls: image_urls ?? [],
       sent_at: new Date().toISOString(),
     });
 
@@ -47,7 +49,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const token =
       account?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN;
-    if (token) {
+    if (notify_line && token) {
       const messages = buildAnnouncementMessage({ content, imageUrls: image_urls });
       await sendBroadcastMessage(token, messages);
     }
