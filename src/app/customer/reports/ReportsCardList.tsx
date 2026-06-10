@@ -100,66 +100,65 @@ export function ReportsCardList({ logs, logImages }: ReportsCardListProps) {
           className="lb-overlay fixed inset-0 z-50 bg-black/88 flex items-center justify-center"
           onClick={close}
         >
-          {/* 画像コンテナ */}
-          <div
-            className="relative flex items-center justify-center px-12"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 左矢印 */}
+          {/* 左矢印 ＋ 画像 ＋ 右矢印 を横並びで配置 */}
+          <div className="flex items-center gap-3 px-2" onClick={(e) => e.stopPropagation()}>
+
+            {/* 左矢印（常に同サイズで存在、非表示のときは invisible） */}
             <button
               onClick={goPrev}
-              disabled={!hasPrev}
               aria-label="前の画像"
-              className={`absolute left-0 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/20 text-white text-xl transition-opacity ${
+              className={`shrink-0 w-14 h-14 rounded-full bg-white/20 text-white flex items-center justify-center text-5xl font-thin leading-none transition-opacity ${
                 hasPrev ? "opacity-100 hover:bg-white/35 active:bg-white/50" : "opacity-0 pointer-events-none"
               }`}
             >
               ‹
             </button>
 
-            {/* 画像本体 — key で再マウント → ぼわんアニメ再実行 */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              key={`${lightbox.urls[lightbox.index]}-${lightbox.index}`}
-              src={lightbox.urls[lightbox.index]}
-              alt="拡大表示"
-              className="lb-image max-w-[80vw] max-h-[82vh] object-contain rounded-xl shadow-2xl"
-            />
+            {/* 画像 ＋ × ボタン ＋ ドットインジケーター */}
+            <div className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                key={`${lightbox.index}`}
+                src={lightbox.urls[lightbox.index]}
+                alt="拡大表示"
+                className="lb-image block max-h-[68vh] max-w-[calc(100vw-160px)] w-auto h-auto rounded-xl shadow-2xl object-contain"
+              />
+
+              {/* × ボタン：画像の右上に重ねる */}
+              <button
+                onClick={close}
+                aria-label="閉じる"
+                className="absolute top-2 right-2 w-8 h-8 bg-black/55 text-white rounded-full text-lg font-bold flex items-center justify-center leading-none shadow-md"
+              >
+                ×
+              </button>
+
+              {/* ドットインジケーター */}
+              {lightbox.urls.length > 1 && (
+                <div className="absolute -bottom-6 left-0 right-0 flex justify-center gap-1.5">
+                  {lightbox.urls.map((_, i) => (
+                    <span
+                      key={i}
+                      className={`inline-block w-1.5 h-1.5 rounded-full transition-colors ${
+                        i === lightbox.index ? "bg-white" : "bg-white/40"
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* 右矢印 */}
             <button
               onClick={goNext}
-              disabled={!hasNext}
               aria-label="次の画像"
-              className={`absolute right-0 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/20 text-white text-xl transition-opacity ${
+              className={`shrink-0 w-14 h-14 rounded-full bg-white/20 text-white flex items-center justify-center text-5xl font-thin leading-none transition-opacity ${
                 hasNext ? "opacity-100 hover:bg-white/35 active:bg-white/50" : "opacity-0 pointer-events-none"
               }`}
             >
               ›
             </button>
 
-            {/* 閉じるボタン */}
-            <button
-              onClick={close}
-              aria-label="閉じる"
-              className="absolute -top-4 -right-2 w-7 h-7 bg-white text-gray-800 rounded-full text-base font-bold flex items-center justify-center shadow-lg leading-none z-10"
-            >
-              ×
-            </button>
-
-            {/* 枚数インジケーター */}
-            {lightbox.urls.length > 1 && (
-              <div className="absolute -bottom-7 left-0 right-0 flex justify-center gap-1.5">
-                {lightbox.urls.map((_, i) => (
-                  <span
-                    key={i}
-                    className={`inline-block w-1.5 h-1.5 rounded-full transition-colors ${
-                      i === lightbox.index ? "bg-white" : "bg-white/40"
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
           </div>
         </div>
       )}
