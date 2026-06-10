@@ -108,15 +108,11 @@ export function TripEditForm({ trip, boats, methodTags = [], locationTags = [] }
           </FormField>
         </div>
 
-        <FormField label="釣り物" error={errors.target_species}>
-          <Input {...register("target_species")} placeholder="タイラバ、アジ釣りなど" />
-        </FormField>
-
-        <FormField label="釣り方" error={errors.fishing_method}>
+        <FormField label="プラン" error={errors.fishing_method}>
           <input
             list="edit-method-list"
             {...register("fishing_method")}
-            placeholder="登録済みから選ぶか入力"
+            placeholder="ジギング・タイラバなど"
             className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           />
           {methodTags.length > 0 && (

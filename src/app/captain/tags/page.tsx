@@ -61,7 +61,7 @@ export default function FishingTagsPage() {
           <div className="flex gap-2">
             <input
               className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400"
-              placeholder="例：イカメタル、タイラバ"
+              placeholder="例：ジギング・タイラバなど"
               value={newMethod}
               onChange={(e) => setNewMethod(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag("method", newMethod, () => setNewMethod("")))}
