@@ -64,6 +64,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             departureTime: trip.departure_time.slice(0, 5),
             returnTime: trip.return_time.slice(0, 5),
             targetSpecies: trip.target_species ?? undefined,
+            fishingMethod: parsed.data.fishing_method ?? undefined,
+            location: parsed.data.location ?? undefined,
             capacity: trip.capacity ?? undefined,
             reservedCount: 0,
             notes: trip.weather_note ?? undefined,

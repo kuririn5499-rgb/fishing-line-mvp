@@ -66,6 +66,14 @@ export default async function CaptainStatsPage() {
   const fromStr = from.toISOString().slice(0, 10);
   const todayStr = now.toISOString().slice(0, 10);
 
+  // 登録済みプランタグ（登録順）
+  const { data: registeredMethodTags } = await supabase
+    .from("fishing_tags")
+    .select("name")
+    .eq("account_id", session.accountId)
+    .eq("tag_type", "method")
+    .order("created_at", { ascending: true });
+
   // 顧客セグメント（全期間）
   const { data: allReservations } = await supabase
     .from("reservations")
@@ -215,16 +223,30 @@ export default async function CaptainStatsPage() {
     if (!planCustomers.has(plan)) planCustomers.set(plan, new Set());
     planCustomers.get(plan)!.add(custId);
   }
-  const planSegEntries = Array.from(planCustomers.entries()).map(([plan, customers]) => {
+  function computePlanSeg(customers: Set<string>) {
     let newC = 0, repeatC = 0, regularC = 0;
     for (const custId of customers) {
       const count = customerCounts.get(custId) ?? 1;
-      if (count === 1) newC++;
-      else if (count <= 4) repeatC++;
-      else regularC++;
+      if (count === 1) newC++; else if (count <= 4) repeatC++; else regularC++;
     }
-    return { plan, newC, repeatC, regularC, total: customers.size };
-  }).sort((a, b) => b.total - a.total);
+    return { newC, repeatC, regularC, total: customers.size };
+  }
+
+  const regNames = new Set((registeredMethodTags ?? []).map((t) => t.name));
+
+  const planSegEntries = [
+    // 登録済みタグ（登録順）― データなしの場合は0
+    ...(registeredMethodTags ?? []).map(({ name }) => {
+      const customers = planCustomers.get(name);
+      if (!customers) return { plan: name, newC: 0, repeatC: 0, regularC: 0, total: 0 };
+      return { plan: name, ...computePlanSeg(customers) };
+    }),
+    // 未登録のフリーテキストプラン（データあり分のみ、件数降順）
+    ...Array.from(planCustomers.entries())
+      .filter(([name]) => !regNames.has(name))
+      .map(([name, customers]) => ({ plan: name, ...computePlanSeg(customers) }))
+      .sort((a, b) => b.total - a.total),
+  ];
 
   return (
     <div className="space-y-5">
@@ -364,7 +386,7 @@ export default async function CaptainStatsPage() {
       )}
 
       {/* プラン別顧客セグメント */}
-      {planSegEntries.length > 0 && (
+      {(registeredMethodTags ?? []).length > 0 && (
         <section>
           <h2 className="text-sm font-bold text-gray-600 mb-2">プラン別顧客セグメント（過去6ヶ月）</h2>
           <Card>

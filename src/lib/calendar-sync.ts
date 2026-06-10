@@ -14,7 +14,7 @@ export async function syncTripCalendarCounts(
   const [{ data: trip }, { data: account }] = await Promise.all([
     supabase
       .from("trips")
-      .select("trip_date, departure_time, return_time, target_species, capacity, gcal_event_id")
+      .select("trip_date, departure_time, return_time, target_species, fishing_method, location, capacity, gcal_event_id")
       .eq("id", tripId)
       .eq("account_id", accountId)
       .maybeSingle(),
@@ -42,12 +42,15 @@ export async function syncTripCalendarCounts(
     0
   );
 
+  const tripAny = trip as Record<string, unknown>;
   const eventInput = {
     tripId,
     tripDate: trip.trip_date,
     departureTime: trip.departure_time.slice(0, 5),
     returnTime: trip.return_time.slice(0, 5),
     targetSpecies: trip.target_species ?? undefined,
+    fishingMethod: (tripAny.fishing_method as string | null) ?? undefined,
+    location: (tripAny.location as string | null) ?? undefined,
     capacity: trip.capacity ?? undefined,
     reservedCount,
   };

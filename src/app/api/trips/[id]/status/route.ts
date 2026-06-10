@@ -106,12 +106,15 @@ export async function PATCH(
             .eq("trip_id", id)
             .neq("status", "cancelled");
 
+          const tripAny = trip as unknown as Record<string, unknown>;
           const gcalEventId = await createTripEvent({
             tripId: trip.id,
             tripDate: trip.trip_date,
             departureTime: trip.departure_time.slice(0, 5),
             returnTime: trip.return_time.slice(0, 5),
             targetSpecies: trip.target_species ?? undefined,
+            fishingMethod: (tripAny.fishing_method as string | null) ?? undefined,
+            location: (tripAny.location as string | null) ?? undefined,
             capacity: trip.capacity ?? undefined,
             reservedCount: reservedCount ?? 0,
           }, creds);

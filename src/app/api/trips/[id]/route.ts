@@ -57,6 +57,8 @@ export async function PATCH(
             departureTime: trip.departure_time.slice(0, 5),
             returnTime: trip.return_time.slice(0, 5),
             targetSpecies: trip.target_species ?? undefined,
+            fishingMethod: parsed.data.fishing_method ?? undefined,
+            location: parsed.data.location ?? undefined,
             capacity: trip.capacity ?? undefined,
             reservedCount,
             notes: trip.weather_note ?? undefined,

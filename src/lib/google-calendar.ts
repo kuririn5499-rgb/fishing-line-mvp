@@ -48,6 +48,8 @@ export interface TripEventInput {
   departureTime: string;   // "HH:MM"
   returnTime: string;      // "HH:MM"
   targetSpecies?: string;
+  fishingMethod?: string;
+  location?: string;
   capacity?: number;
   reservedCount?: number;
   notes?: string;
@@ -61,12 +63,13 @@ function formatDateShort(date: string): string {
 
 function buildSummary(input: TripEventInput & { reservedCount?: number }): string {
   const dateStr = formatDateShort(input.tripDate);
-  const species = input.targetSpecies ?? "出船";
+  const plan = input.fishingMethod ?? input.targetSpecies ?? "出船";
+  const locStr = input.location ? ` ${input.location}` : "";
   const time = `${input.departureTime}〜${input.returnTime}`;
   const reserved = input.reservedCount ?? 0;
   const available = input.capacity != null ? input.capacity - reserved : null;
   const countStr = available != null ? ` 予約${reserved}名 募集中${available}名` : ` 予約${reserved}名`;
-  return `${dateStr} ${species} ${time}${countStr}`;
+  return `${dateStr} ${plan}${locStr} ${time}${countStr}`;
 }
 
 export async function createTripEvent(input: TripEventInput, creds: GoogleCalendarCredentials): Promise<string> {
