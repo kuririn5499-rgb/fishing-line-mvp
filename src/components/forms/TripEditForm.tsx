@@ -13,9 +13,11 @@ import type { Trip } from "@/types";
 interface TripEditFormProps {
   trip: Trip & { boats?: { name: string } | null };
   boats: { id: string; name: string }[];
+  methodTags?: string[];
+  locationTags?: string[];
 }
 
-export function TripEditForm({ trip, boats }: TripEditFormProps) {
+export function TripEditForm({ trip, boats, methodTags = [], locationTags = [] }: TripEditFormProps) {
   const router = useRouter();
   const { toast, show, hide } = useToast();
   const [open, setOpen] = useState(false);
@@ -32,6 +34,8 @@ export function TripEditForm({ trip, boats }: TripEditFormProps) {
       departure_time: trip.departure_time?.slice(0, 5) ?? "",
       return_time: trip.return_time?.slice(0, 5) ?? "",
       target_species: trip.target_species ?? "",
+      fishing_method: (trip as Trip & { fishing_method?: string }).fishing_method ?? "",
+      location: (trip as Trip & { location?: string }).location ?? "",
       capacity: trip.capacity ?? undefined,
       price_per_person: trip.price_per_person ?? undefined,
       weather_note: trip.weather_note ?? "",
@@ -106,6 +110,34 @@ export function TripEditForm({ trip, boats }: TripEditFormProps) {
 
         <FormField label="釣り物" error={errors.target_species}>
           <Input {...register("target_species")} placeholder="タイラバ、アジ釣りなど" />
+        </FormField>
+
+        <FormField label="釣り方" error={errors.fishing_method}>
+          <input
+            list="edit-method-list"
+            {...register("fishing_method")}
+            placeholder="登録済みから選ぶか入力"
+            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+          />
+          {methodTags.length > 0 && (
+            <datalist id="edit-method-list">
+              {methodTags.map((m) => <option key={m} value={m} />)}
+            </datalist>
+          )}
+        </FormField>
+
+        <FormField label="場所" error={errors.location}>
+          <input
+            list="edit-location-list"
+            {...register("location")}
+            placeholder="登録済みから選ぶか入力"
+            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+          />
+          {locationTags.length > 0 && (
+            <datalist id="edit-location-list">
+              {locationTags.map((l) => <option key={l} value={l} />)}
+            </datalist>
+          )}
         </FormField>
 
         <div className="grid grid-cols-2 gap-3">

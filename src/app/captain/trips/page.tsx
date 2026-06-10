@@ -25,8 +25,8 @@ export default async function CaptainTripsPage() {
   // 本日以降の便のみ表示
   const today = todayJST();
 
-  // 便一覧（pre_departure_checks をJOINで取得）+ 船一覧 を並列取得
-  const [{ data: tripsRaw }, { data: boats }] = await Promise.all([
+  // 便一覧（pre_departure_checks をJOINで取得）+ 船一覧 + タグを並列取得
+  const [{ data: tripsRaw }, { data: boats }, { data: tagsRaw }] = await Promise.all([
     supabase
       .from("trips")
       .select("*, boats(name), pre_departure_checks(departure_judgement, cancel_reason)")
@@ -40,7 +40,15 @@ export default async function CaptainTripsPage() {
       .select("id, name")
       .eq("account_id", session.accountId)
       .eq("is_active", true),
+    supabase
+      .from("fishing_tags")
+      .select("tag_type, name")
+      .eq("account_id", session.accountId)
+      .order("name", { ascending: true }),
   ]);
+
+  const methodTags = (tagsRaw ?? []).filter((t) => t.tag_type === "method").map((t) => t.name);
+  const locationTags = (tagsRaw ?? []).filter((t) => t.tag_type === "location").map((t) => t.name);
 
   type DepartureCheck = { departure_judgement: string | null; cancel_reason: string | null };
   const departureMap = new Map(
@@ -75,7 +83,7 @@ export default async function CaptainTripsPage() {
 
       {/* 便作成・休船設定 */}
       <div className="space-y-2">
-        <TripCreateForm boats={boats ?? []} />
+        <TripCreateForm boats={boats ?? []} methodTags={methodTags} locationTags={locationTags} />
         <ClosedDayForm />
       </div>
 
@@ -129,7 +137,7 @@ export default async function CaptainTripsPage() {
                       <p className="text-xs text-gray-400 mt-0.5">{trip.weather_note}</p>
                     )}
                     {/* インライン編集フォーム */}
-                    <TripEditForm trip={trip} boats={boats ?? []} />
+                    <TripEditForm trip={trip} boats={boats ?? []} methodTags={methodTags} locationTags={locationTags} />
                   </div>
                 </div>
                 {/* ステータス変更・出船判断・削除 */}

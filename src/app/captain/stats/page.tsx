@@ -90,7 +90,7 @@ export default async function CaptainStatsPage() {
   // 便一覧（過去6ヶ月）
   const { data: trips } = await supabase
     .from("trips")
-    .select("id, trip_date, capacity, status, price_per_person")
+    .select("id, trip_date, capacity, status, price_per_person, fishing_method, location")
     .eq("account_id", session.accountId)
     .gte("trip_date", fromStr)
     .lte("trip_date", todayStr)
@@ -174,6 +174,34 @@ export default async function CaptainStatsPage() {
   const maxTrips = Math.max(...months.map((m) => m.trips), 1);
 
   const currentFee = Math.floor(current.revenue * commissionRate);
+
+  // 釣り方・場所別集計
+  type TagStats = { passengers: number; reservations: number };
+  const methodStats = new Map<string, TagStats>();
+  const locationStats = new Map<string, TagStats>();
+
+  for (const r of reservations ?? []) {
+    const trip = tripDateMap.get(r.trip_id);
+    if (!trip) continue;
+    const pax = r.passengers_count ?? 0;
+    const method = (trip as Record<string, unknown>).fishing_method as string | null | undefined;
+    const loc = (trip as Record<string, unknown>).location as string | null | undefined;
+    if (method) {
+      const s = methodStats.get(method) ?? { passengers: 0, reservations: 0 };
+      s.passengers += pax; s.reservations += 1;
+      methodStats.set(method, s);
+    }
+    if (loc) {
+      const s = locationStats.get(loc) ?? { passengers: 0, reservations: 0 };
+      s.passengers += pax; s.reservations += 1;
+      locationStats.set(loc, s);
+    }
+  }
+
+  const methodEntries = Array.from(methodStats.entries()).sort((a, b) => b[1].passengers - a[1].passengers);
+  const locationEntries = Array.from(locationStats.entries()).sort((a, b) => b[1].passengers - a[1].passengers);
+  const maxMethodPax = Math.max(...methodEntries.map(([, s]) => s.passengers), 1);
+  const maxLocationPax = Math.max(...locationEntries.map(([, s]) => s.passengers), 1);
 
   return (
     <div className="space-y-5">
@@ -274,6 +302,64 @@ export default async function CaptainStatsPage() {
                     <div
                       className="h-2 rounded-full transition-all"
                       style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%`, backgroundColor: hex }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
+        </section>
+      )}
+
+      {/* 釣り方別集計 */}
+      {methodEntries.length > 0 && (
+        <section>
+          <h2 className="text-sm font-bold text-gray-600 mb-2">釣り方別（過去6ヶ月）</h2>
+          <Card>
+            {methodEntries.map(([name, s]) => {
+              const pct = Math.round((s.passengers / maxMethodPax) * 100);
+              return (
+                <div key={name} className="mb-3 last:mb-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-700">{name}</span>
+                    <span className="text-sm font-bold text-gray-800">
+                      {s.passengers}名
+                      <span className="text-xs font-normal text-gray-400 ml-1">/ {s.reservations}件</span>
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2">
+                    <div
+                      className="h-2 rounded-full transition-all"
+                      style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%`, backgroundColor: "#38bdf8" }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
+        </section>
+      )}
+
+      {/* 場所別集計 */}
+      {locationEntries.length > 0 && (
+        <section>
+          <h2 className="text-sm font-bold text-gray-600 mb-2">場所別（過去6ヶ月）</h2>
+          <Card>
+            {locationEntries.map(([name, s]) => {
+              const pct = Math.round((s.passengers / maxLocationPax) * 100);
+              return (
+                <div key={name} className="mb-3 last:mb-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-700">{name}</span>
+                    <span className="text-sm font-bold text-gray-800">
+                      {s.passengers}名
+                      <span className="text-xs font-normal text-gray-400 ml-1">/ {s.reservations}件</span>
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2">
+                    <div
+                      className="h-2 rounded-full transition-all"
+                      style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%`, backgroundColor: "#4ade80" }}
                     />
                   </div>
                 </div>

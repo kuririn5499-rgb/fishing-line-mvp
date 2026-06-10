@@ -15,9 +15,11 @@ import { Toast, useToast } from "@/components/ui/Toast";
 
 interface TripCreateFormProps {
   boats: { id: string; name: string }[];
+  methodTags?: string[];
+  locationTags?: string[];
 }
 
-export function TripCreateForm({ boats }: TripCreateFormProps) {
+export function TripCreateForm({ boats, methodTags = [], locationTags = [] }: TripCreateFormProps) {
   const { toast, show, hide } = useToast();
   const [open, setOpen] = useState(false);
   const router = useRouter();
@@ -108,6 +110,34 @@ export function TripCreateForm({ boats }: TripCreateFormProps) {
             {...register("target_species")}
             placeholder="タイラバ、アジ釣りなど"
           />
+        </FormField>
+
+        <FormField label="釣り方" error={errors.fishing_method}>
+          <input
+            list="method-list"
+            {...register("fishing_method")}
+            placeholder="登録済みから選ぶか入力"
+            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+          />
+          {methodTags.length > 0 && (
+            <datalist id="method-list">
+              {methodTags.map((m) => <option key={m} value={m} />)}
+            </datalist>
+          )}
+        </FormField>
+
+        <FormField label="場所" error={errors.location}>
+          <input
+            list="location-list"
+            {...register("location")}
+            placeholder="登録済みから選ぶか入力"
+            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+          />
+          {locationTags.length > 0 && (
+            <datalist id="location-list">
+              {locationTags.map((l) => <option key={l} value={l} />)}
+            </datalist>
+          )}
         </FormField>
 
         <div className="grid grid-cols-2 gap-3">

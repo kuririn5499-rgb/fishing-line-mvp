@@ -303,6 +303,12 @@ export default async function CaptainDashboardPage() {
             )}
           </Card>
         </Link>
+        <Link href="/captain/tags">
+          <Card className="flex items-center gap-3 hover:shadow-md transition-shadow">
+            <span className="text-2xl">🏷️</span>
+            <span className="text-sm font-medium">タグ管理</span>
+          </Card>
+        </Link>
       </div>
 
       {/* 新しい便を追加 */}

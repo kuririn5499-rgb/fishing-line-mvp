@@ -45,6 +45,8 @@ export const TripCreateSchema = z.object({
     .or(z.literal("")),
   trip_type: z.string().max(100).optional(),
   target_species: z.string().max(200).optional(),
+  fishing_method: z.string().max(100).optional(),
+  location: z.string().max(100).optional(),
   capacity: z.coerce.number().int().min(1).max(100).optional(),
   price_per_person: z.coerce.number().int().min(0).max(1000000).optional(),
   weather_note: z.string().max(500).optional(),
