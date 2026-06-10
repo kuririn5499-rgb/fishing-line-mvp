@@ -232,6 +232,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const token = account?.line_channel_access_token ?? process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
       const { data: nf1 } = await supabase2.from("accounts").select("notify_line_new_reservation").eq("id", session.accountId).maybeSingle();
       const notifyEnabled = (nf1 as { notify_line_new_reservation?: boolean } | null)?.notify_line_new_reservation !== false;
+      console.log("[reservations] LINE通知デバッグ:", {
+        hasToken: !!token,
+        tokenSource: account?.line_channel_access_token ? "DB" : process.env.LINE_CHANNEL_ACCESS_TOKEN ? "ENV" : "なし",
+        notifyEnabled,
+        captainsCount: (captains ?? []).length,
+        captainsWithLineId: (captains ?? []).filter(c => c.line_user_id).length,
+        hasTripForNotify: !!tripForNotify,
+        accountId: session.accountId,
+      });
       if (token && tripForNotify && notifyEnabled) {
         const messages = buildNewReservationMessage({
           customerName: custForNotify?.full_name ?? session.displayName ?? null,
