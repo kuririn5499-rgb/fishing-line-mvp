@@ -84,7 +84,18 @@ export function LiffGate({ liffId, accountSlug, mode, redirectTo: _redirectTo }:
         });
 
         const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? "認証失敗");
+        if (!res.ok) {
+          const errMsg: string = json.error ?? "認証失敗";
+          // IDトークンが期限切れ or 無効 → キャッシュを破棄して再ログイン
+          if (errMsg.toLowerCase().includes("expired") || errMsg.includes("invalid_request")) {
+            liff.logout();
+            const redirectUrl2 = new URL(window.location.href);
+            redirectUrl2.searchParams.set("a", effectiveSlug);
+            liff.login({ redirectUri: redirectUrl2.toString() });
+            return;
+          }
+          throw new Error(errMsg);
+        }
 
         const resolvedSlug = json.accountSlug || effectiveSlug;
         sessionStorage.setItem("liff_account_slug", resolvedSlug);
