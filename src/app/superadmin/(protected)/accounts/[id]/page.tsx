@@ -55,6 +55,14 @@ function EndpointRow({ label, defaultUrl }: { label: string; defaultUrl: string 
   );
 }
 
+const COMMISSION_RANKS = [
+  { value: "normal",   label: "ノーマル", rate: "5%" },
+  { value: "bronze",   label: "ブロンズ", rate: "4%" },
+  { value: "silver",   label: "シルバー", rate: "3%" },
+  { value: "gold",     label: "ゴールド", rate: "2%" },
+  { value: "platinum", label: "プラチナ", rate: "1%" },
+] as const;
+
 interface Account {
   id: string; slug: string; name: string; boat_name: string | null;
   liff_id_customer: string | null; liff_id_captain: string | null;
@@ -62,6 +70,7 @@ interface Account {
   contact_email: string | null; contact_phone: string | null;
   prefecture: string | null; is_active: boolean;
   feature_points: boolean; feature_coupon: boolean; feature_customer_cancel: boolean;
+  commission_rank: string;
   google_calendar_id: string | null;
   google_spreadsheet_id: string | null;
   google_service_account_email: string | null;
@@ -285,6 +294,31 @@ export default function EditAccountPage() {
             </button>
           </div>
         ))}
+
+        <hr className="border-gray-100" />
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">船ナビ手数料ランク</p>
+        <div className="space-y-2">
+          <div className="grid grid-cols-5 gap-1.5">
+            {COMMISSION_RANKS.map((rank) => (
+              <button
+                key={rank.value}
+                type="button"
+                onClick={() => set("commission_rank", rank.value)}
+                className={`flex flex-col items-center py-2 px-1 rounded-xl border text-xs font-medium transition-colors ${
+                  (form.commission_rank ?? "normal") === rank.value
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
+                }`}
+              >
+                <span className="font-bold">{rank.rate}</span>
+                <span className="mt-0.5 text-[10px] opacity-80">{rank.label}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400">
+            ※ 紹介数に応じてランクを設定します。ランクは月次精算の手数料計算に使用されます。
+          </p>
+        </div>
 
         <hr className="border-gray-100" />
         <div className="flex items-center justify-between">

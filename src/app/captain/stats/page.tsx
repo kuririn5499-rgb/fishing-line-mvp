@@ -8,6 +8,22 @@ import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
 import { formatPrice } from "@/lib/repositories/utils";
 
+const COMMISSION_RATES: Record<string, number> = {
+  normal: 0.05,
+  bronze: 0.04,
+  silver: 0.03,
+  gold: 0.02,
+  platinum: 0.01,
+};
+
+const COMMISSION_RANK_LABELS: Record<string, { name: string; rate: string }> = {
+  normal:   { name: "ノーマル", rate: "5%" },
+  bronze:   { name: "ブロンズ", rate: "4%" },
+  silver:   { name: "シルバー", rate: "3%" },
+  gold:     { name: "ゴールド", rate: "2%" },
+  platinum: { name: "プラチナ", rate: "1%" },
+};
+
 function getMonthLabel(ym: string): string {
   const [, m] = ym.split("-");
   return `${parseInt(m)}月`;
@@ -23,6 +39,17 @@ export default async function CaptainStatsPage() {
   if (!session) return null;
 
   const supabase = createServerSupabaseClient();
+
+  // アカウントの手数料ランク取得
+  const { data: accountData } = await supabase
+    .from("accounts")
+    .select("commission_rank")
+    .eq("id", session.accountId)
+    .single();
+
+  const commissionRank = accountData?.commission_rank ?? "normal";
+  const commissionRate = COMMISSION_RATES[commissionRank] ?? 0.05;
+  const rankInfo = COMMISSION_RANK_LABELS[commissionRank] ?? { name: "ノーマル", rate: "5%" };
 
   // 過去6ヶ月の範囲
   const now = new Date();
@@ -118,6 +145,9 @@ export default async function CaptainStatsPage() {
   const maxPassengers = Math.max(...months.map((m) => m.passengers), 1);
   const maxTrips = Math.max(...months.map((m) => m.trips), 1);
 
+  const currentFee = Math.floor(current.revenue * commissionRate);
+  const totalFee = Math.floor(total.revenue * commissionRate);
+
   return (
     <div className="space-y-5">
       <h1 className="text-lg font-bold text-gray-800">統計</h1>
@@ -138,6 +168,19 @@ export default async function CaptainStatsPage() {
             </Card>
           ))}
         </div>
+        {current.revenue > 0 && (
+          <Card className="mt-3 bg-amber-50 border border-amber-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-amber-700 font-medium">船ナビ手数料（今月）</p>
+                <p className="text-xs text-amber-600 mt-0.5">
+                  ランク：{rankInfo.name}（{rankInfo.rate}）
+                </p>
+              </div>
+              <p className="text-lg font-bold text-amber-800">{formatPrice(currentFee)}</p>
+            </div>
+          </Card>
+        )}
       </section>
 
       {/* 6ヶ月累計 */}
@@ -163,6 +206,17 @@ export default async function CaptainStatsPage() {
                 {total.revenue > 0 ? formatPrice(total.revenue) : "—"}
               </p>
             </div>
+            {total.revenue > 0 && (
+              <div className="col-span-2 border-t border-amber-100 pt-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-amber-700 font-medium">船ナビ手数料（6ヶ月累計）</p>
+                    <p className="text-xs text-amber-500">{rankInfo.name}ランク {rankInfo.rate}</p>
+                  </div>
+                  <p className="text-base font-bold text-amber-700">{formatPrice(totalFee)}</p>
+                </div>
+              </div>
+            )}
           </div>
         </Card>
       </section>
@@ -223,20 +277,27 @@ export default async function CaptainStatsPage() {
                 <th className="text-right px-3 py-2.5 text-gray-500 font-medium">予約</th>
                 <th className="text-right px-3 py-2.5 text-gray-500 font-medium">人数</th>
                 <th className="text-right px-3 py-2.5 text-gray-500 font-medium">売上</th>
+                <th className="text-right px-3 py-2.5 text-amber-500 font-medium">手数料</th>
               </tr>
             </thead>
             <tbody>
-              {months.map((m) => (
-                <tr key={m.ym} className={`border-b border-gray-50 last:border-0 ${m.ym === currentMonth ? "bg-brand-50" : ""}`}>
-                  <td className="px-3 py-2 font-medium text-gray-700">{getMonthLabel(m.ym)}</td>
-                  <td className="px-3 py-2 text-right text-gray-600">{m.trips}</td>
-                  <td className="px-3 py-2 text-right text-gray-600">{m.reservations}</td>
-                  <td className="px-3 py-2 text-right text-gray-600">{m.passengers}</td>
-                  <td className="px-3 py-2 text-right text-gray-600">
-                    {m.revenue > 0 ? formatPrice(m.revenue) : "—"}
-                  </td>
-                </tr>
-              ))}
+              {months.map((m) => {
+                const fee = Math.floor(m.revenue * commissionRate);
+                return (
+                  <tr key={m.ym} className={`border-b border-gray-50 last:border-0 ${m.ym === currentMonth ? "bg-brand-50" : ""}`}>
+                    <td className="px-3 py-2 font-medium text-gray-700">{getMonthLabel(m.ym)}</td>
+                    <td className="px-3 py-2 text-right text-gray-600">{m.trips}</td>
+                    <td className="px-3 py-2 text-right text-gray-600">{m.reservations}</td>
+                    <td className="px-3 py-2 text-right text-gray-600">{m.passengers}</td>
+                    <td className="px-3 py-2 text-right text-gray-600">
+                      {m.revenue > 0 ? formatPrice(m.revenue) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right text-amber-600">
+                      {m.revenue > 0 ? formatPrice(fee) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </Card>
