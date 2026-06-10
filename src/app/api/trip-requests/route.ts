@@ -75,8 +75,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           message: parsed.data.message ?? null,
         });
         for (const captain of captains ?? []) {
-          if (captain.line_user_id) {
-            await sendPushMessage(token, captain.line_user_id, messages);
+          if (/^U[0-9a-f]{32}$/i.test(captain.line_user_id ?? "")) {
+            await sendPushMessage(token, captain.line_user_id!, messages).catch((e) =>
+              console.error("[trip-requests] LINE送信失敗:", captain.line_user_id, e)
+            );
           }
         }
       }
