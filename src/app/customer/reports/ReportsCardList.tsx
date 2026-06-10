@@ -108,11 +108,13 @@ export function ReportsCardList({ logs, logImages }: ReportsCardListProps) {
             <button
               onClick={goPrev}
               aria-label="前の画像"
-              className={`shrink-0 w-14 h-14 rounded-full bg-white/20 text-white flex items-center justify-center text-5xl font-thin leading-none transition-opacity ${
+              className={`shrink-0 w-14 h-14 rounded-full bg-white/20 text-white flex items-center justify-center transition-opacity ${
                 hasPrev ? "opacity-100 hover:bg-white/35 active:bg-white/50" : "opacity-0 pointer-events-none"
               }`}
             >
-              ‹
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
             </button>
 
             {/* 画像 ＋ × ボタン ＋ ドットインジケーター */}
@@ -153,11 +155,13 @@ export function ReportsCardList({ logs, logImages }: ReportsCardListProps) {
             <button
               onClick={goNext}
               aria-label="次の画像"
-              className={`shrink-0 w-14 h-14 rounded-full bg-white/20 text-white flex items-center justify-center text-5xl font-thin leading-none transition-opacity ${
+              className={`shrink-0 w-14 h-14 rounded-full bg-white/20 text-white flex items-center justify-center transition-opacity ${
                 hasNext ? "opacity-100 hover:bg-white/35 active:bg-white/50" : "opacity-0 pointer-events-none"
               }`}
             >
-              ›
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
             </button>
 
           </div>
