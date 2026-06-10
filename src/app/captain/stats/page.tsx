@@ -102,7 +102,7 @@ export default async function CaptainStatsPage() {
   const { data: reservations } = tripIds.length > 0
     ? await supabase
         .from("reservations")
-        .select("trip_id, passengers_count, discount_amount")
+        .select("trip_id, passengers_count, discount_amount, customer_id")
         .in("trip_id", tripIds)
         .neq("status", "cancelled")
     : { data: [] };
@@ -202,6 +202,29 @@ export default async function CaptainStatsPage() {
   const locationEntries = Array.from(locationStats.entries()).sort((a, b) => b[1].passengers - a[1].passengers);
   const maxMethodPax = Math.max(...methodEntries.map(([, s]) => s.passengers), 1);
   const maxLocationPax = Math.max(...locationEntries.map(([, s]) => s.passengers), 1);
+
+  // プラン別顧客セグメント（新規/リピーター/常連）
+  const planCustomers = new Map<string, Set<string>>();
+  for (const r of reservations ?? []) {
+    const trip = tripDateMap.get(r.trip_id);
+    if (!trip) continue;
+    const plan = (trip as Record<string, unknown>).fishing_method as string | null | undefined;
+    if (!plan) continue;
+    const custId = (r as { customer_id?: string | null }).customer_id;
+    if (!custId) continue;
+    if (!planCustomers.has(plan)) planCustomers.set(plan, new Set());
+    planCustomers.get(plan)!.add(custId);
+  }
+  const planSegEntries = Array.from(planCustomers.entries()).map(([plan, customers]) => {
+    let newC = 0, repeatC = 0, regularC = 0;
+    for (const custId of customers) {
+      const count = customerCounts.get(custId) ?? 1;
+      if (count === 1) newC++;
+      else if (count <= 4) repeatC++;
+      else regularC++;
+    }
+    return { plan, newC, repeatC, regularC, total: customers.size };
+  }).sort((a, b) => b.total - a.total);
 
   return (
     <div className="space-y-5">
@@ -332,6 +355,38 @@ export default async function CaptainStatsPage() {
                       className="h-2 rounded-full transition-all"
                       style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%`, backgroundColor: "#38bdf8" }}
                     />
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
+        </section>
+      )}
+
+      {/* プラン別顧客セグメント */}
+      {planSegEntries.length > 0 && (
+        <section>
+          <h2 className="text-sm font-bold text-gray-600 mb-2">プラン別顧客セグメント（過去6ヶ月）</h2>
+          <Card>
+            {planSegEntries.map(({ plan, newC, repeatC, regularC, total }) => {
+              const newPct  = total > 0 ? Math.round((newC     / total) * 100) : 0;
+              const repPct  = total > 0 ? Math.round((repeatC  / total) * 100) : 0;
+              const regPct  = total > 0 ? Math.round((regularC / total) * 100) : 0;
+              return (
+                <div key={plan} className="mb-4 last:mb-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-700">{plan}</span>
+                    <span className="text-xs text-gray-400">{total}名</span>
+                  </div>
+                  <div className="flex w-full h-3 rounded-full overflow-hidden bg-gray-100">
+                    {newPct  > 0 && <div style={{ width: `${newPct}%`,  backgroundColor: "#38bdf8" }} />}
+                    {repPct  > 0 && <div style={{ width: `${repPct}%`,  backgroundColor: "#4ade80" }} />}
+                    {regPct  > 0 && <div style={{ width: `${regPct}%`,  backgroundColor: "#fbbf24" }} />}
+                  </div>
+                  <div className="flex gap-3 mt-1 flex-wrap">
+                    {newC     > 0 && <span className="text-xs" style={{ color: "#38bdf8" }}>新規 {newC}名</span>}
+                    {repeatC  > 0 && <span className="text-xs" style={{ color: "#4ade80" }}>リピーター {repeatC}名</span>}
+                    {regularC > 0 && <span className="text-xs" style={{ color: "#fbbf24" }}>常連 {regularC}名</span>}
                   </div>
                 </div>
               );

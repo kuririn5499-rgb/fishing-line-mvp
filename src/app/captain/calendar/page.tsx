@@ -26,7 +26,7 @@ export default async function CaptainCalendarPage() {
   const [{ data: tripsRaw }, { data: reservationRows }] = await Promise.all([
     supabase
       .from("trips")
-      .select("id, trip_date, departure_time, target_species, status, capacity, boats(name)")
+      .select("id, trip_date, departure_time, target_species, fishing_method, location, status, capacity, boats(name)")
       .eq("account_id", session.accountId)
       .gte("trip_date", from.toISOString().slice(0, 10))
       .lte("trip_date", until.toISOString().slice(0, 10))
@@ -53,6 +53,8 @@ export default async function CaptainCalendarPage() {
       trip_date: t.trip_date,
       departure_time: t.departure_time,
       target_species: t.target_species,
+      fishing_method: (t as Record<string, unknown>).fishing_method as string | null ?? null,
+      location: (t as Record<string, unknown>).location as string | null ?? null,
       status: t.status,
       boat_name: boatName,
       reserved: reservedMap.get(t.id) ?? 0,

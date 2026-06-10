@@ -46,18 +46,19 @@ export default async function CustomerHomePage() {
   // 表示名: LINE名を優先し、未設定の場合のみ customers.full_name を使用
   const displayName = session.displayName || customer?.full_name || null;
 
-  // 自分の今後の予約（直近20件取得してJSで絞り込み）
+  // 自分の今後の予約（5件上限）
   const { data: myReservationsRaw } = customer
     ? await supabase
         .from("reservations")
         .select(`
           id, reservation_code, status, passengers_count, discount_amount,
-          trips(id, trip_date, departure_time, return_time, target_species, price_per_person, status, boats(name))
+          trips!inner(id, trip_date, departure_time, return_time, target_species, price_per_person, status, boats(name))
         `)
         .eq("customer_id", customer.id)
         .neq("status", "cancelled")
-        .order("created_at", { ascending: false })
-        .limit(20)
+        .gte("trips.trip_date", today)
+        .order("created_at", { ascending: true })
+        .limit(5)
     : { data: [] };
 
   type ResTrip = {
@@ -74,18 +75,39 @@ export default async function CustomerHomePage() {
 
   const myReservations = ((myReservationsRaw ?? []) as ResRow[])
     .map((r) => ({ ...r, trip: Array.isArray(r.trips) ? r.trips[0] ?? null : r.trips }))
-    .filter((r) => r.trip && r.trip.trip_date >= today && r.trip.status !== "cancelled")
-    .sort((a, b) => (a.trip!.trip_date > b.trip!.trip_date ? 1 : -1))
-    .slice(0, 5);
+    .filter((r) => r.trip && r.trip.status !== "cancelled")
+    .sort((a, b) => (a.trip!.trip_date > b.trip!.trip_date ? 1 : -1));
 
-  // 自分のリクエスト一覧
+  // 承認済みリクエストのみ表示
   const { data: myRequests } = await supabase
     .from("trip_requests")
-    .select("*")
+    .select("id, requested_date, trip_id, status, target_species")
     .eq("account_id", session.accountId)
     .eq("user_id", session.userId)
+    .eq("status", "approved")
+    .not("trip_id", "is", null)
     .order("created_at", { ascending: false })
-    .limit(5);
+    .limit(10);
+
+  // 承認済みリクエストのうち既に予約済みのものを除外
+  const approvedTripIds = (myRequests ?? [])
+    .map((r) => r.trip_id as string | null)
+    .filter((id): id is string => !!id);
+  let reservedRequestTripIds = new Set<string>();
+  if (customer && approvedTripIds.length > 0) {
+    const { data: existingRes } = await supabase
+      .from("reservations")
+      .select("trip_id")
+      .eq("customer_id", customer.id)
+      .in("trip_id", approvedTripIds)
+      .neq("status", "cancelled");
+    reservedRequestTripIds = new Set(
+      (existingRes ?? []).map((r) => r.trip_id).filter((id): id is string => !!id)
+    );
+  }
+  const displayRequests = (myRequests ?? []).filter(
+    (r) => r.trip_id && !reservedRequestTripIds.has(r.trip_id as string)
+  );
 
   // 船名 + フィーチャーフラグ
   const { data: account } = await supabase
@@ -125,7 +147,7 @@ export default async function CustomerHomePage() {
         .in("trip_id", myTripIds)
         .gte("checked_at", sevenDaysAgoDate + "T00:00:00Z")
         .order("checked_at", { ascending: false })
-        .limit(5);
+        .limit(1);
       departureNotices = (checks ?? []).map((c) => ({
         ...c,
         trips: Array.isArray(c.trips) ? (c.trips[0] ?? null) : (c.trips as typeof departureNotices[number]["trips"]),
@@ -150,34 +172,30 @@ export default async function CustomerHomePage() {
         </h1>
       </div>
 
-      {/* 自分のリクエスト */}
-      {(myRequests ?? []).length > 0 && (
+      {/* 承認済みリクエスト */}
+      {displayRequests.length > 0 && (
         <section>
           <h2 className="text-sm font-bold text-gray-700 mb-2">リクエスト状況</h2>
           <div className="space-y-2">
-            {(myRequests as TripRequest[]).map((req) => {
-              const stMap: Record<string, { label: string; className: string }> = {
-                pending:  { label: "承認待ち", className: "bg-yellow-100 text-yellow-700" },
-                approved: { label: "承認済み ✅", className: "bg-green-100 text-green-700" },
-                rejected: { label: "お断り",   className: "bg-gray-100 text-gray-500" },
-              };
-              const st = stMap[req.status] ?? stMap.pending;
-              return (
-                <Card key={req.id}>
+            {displayRequests.map((req) => (
+              <Link key={req.id} href={`/customer/reservations?trip_id=${req.trip_id}`}>
+                <Card className="hover:shadow-md transition-shadow active:scale-[0.99] border-l-4 border-l-green-400">
                   <div className="flex items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold">{formatDateWithDay(req.requested_date)}</p>
-                      {req.target_species && (
-                        <p className="text-xs text-gray-500">{req.target_species}</p>
+                      <p className="text-xs text-green-600 font-medium mb-0.5">承認済み ✅</p>
+                      <p className="text-sm font-semibold">{formatDateWithDay(req.requested_date as string)}</p>
+                      {(req.target_species as string | null) && (
+                        <p className="text-xs text-gray-500">{req.target_species as string}</p>
                       )}
                     </div>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${st.className}`}>
-                      {st.label}
-                    </span>
+                    <div className="shrink-0 flex items-center gap-1">
+                      <span className="text-xs text-brand-600 font-medium">今すぐ予約する</span>
+                      <span className="text-gray-300 text-lg">›</span>
+                    </div>
                   </div>
                 </Card>
-              );
-            })}
+              </Link>
+            ))}
           </div>
         </section>
       )}

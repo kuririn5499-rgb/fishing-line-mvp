@@ -8,6 +8,8 @@ interface TripSummary {
   trip_date: string;
   departure_time: string | null;
   target_species: string | null;
+  fishing_method: string | null;
+  location: string | null;
   status: string;
   boat_name: string | null;
   reserved: number;
@@ -189,16 +191,15 @@ export function TripCalendar({ trips, today }: Props) {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800">
                       {t.departure_time ? t.departure_time.slice(0, 5) + "〜" : "時間未定"}
-                      {t.target_species ? `　${t.target_species}` : ""}
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {t.boat_name ?? "—"}
-                      {t.capacity != null && (
-                        <span className={`ml-2 ${t.reserved >= (t.capacity ?? 0) ? "text-red-500" : "text-green-600"}`}>
-                          予約{t.reserved}/{t.capacity}名
-                        </span>
-                      )}
+                      {[t.boat_name, t.fishing_method, t.location].filter(Boolean).join(" / ") || "—"}
                     </p>
+                    {t.capacity != null && (
+                      <p className={`text-xs mt-0.5 ${t.reserved >= (t.capacity ?? 0) ? "text-red-500 font-medium" : "text-green-600"}`}>
+                        予約{t.reserved}/{t.capacity}名
+                      </p>
+                    )}
                   </div>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium
                     ${t.status === "open" ? "bg-green-50 text-green-700" :

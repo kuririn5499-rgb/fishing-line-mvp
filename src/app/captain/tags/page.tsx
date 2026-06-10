@@ -96,7 +96,7 @@ export default function FishingTagsPage() {
           <div className="flex gap-2">
             <input
               className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-400"
-              placeholder="例：近海、アジ曽根、沖合"
+              placeholder="例：近海、○○曽根、遠征"
               value={newLocation}
               onChange={(e) => setNewLocation(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag("location", newLocation, () => setNewLocation("")))}
