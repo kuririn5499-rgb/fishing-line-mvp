@@ -49,14 +49,14 @@ export default function FishingTagsPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-lg font-bold text-gray-800">釣り方・場所タグ管理</h1>
+      <h1 className="text-lg font-bold text-gray-800">プラン・場所タグ管理</h1>
       <p className="text-xs text-gray-500">便作成時に選択肢として表示され、統計の集客セグメントにも使用されます。</p>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 
       {/* 釣り方 */}
       <section>
-        <h2 className="text-sm font-bold text-gray-700 mb-2">釣り方</h2>
+        <h2 className="text-sm font-bold text-gray-700 mb-2">プラン</h2>
         <Card className="space-y-2">
           <div className="flex gap-2">
             <input

@@ -314,7 +314,7 @@ export default async function CaptainStatsPage() {
       {/* 釣り方別集計 */}
       {methodEntries.length > 0 && (
         <section>
-          <h2 className="text-sm font-bold text-gray-600 mb-2">釣り方別（過去6ヶ月）</h2>
+          <h2 className="text-sm font-bold text-gray-600 mb-2">プラン別（過去6ヶ月）</h2>
           <Card>
             {methodEntries.map(([name, s]) => {
               const pct = Math.round((s.passengers / maxMethodPax) * 100);
