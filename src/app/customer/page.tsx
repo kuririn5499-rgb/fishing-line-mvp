@@ -94,16 +94,41 @@ export default async function CustomerHomePage() {
     .eq("id", session.accountId)
     .maybeSingle();
 
-  // 直近7日の出船通知
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: departureNotices } = await supabase
-    .from("message_logs")
-    .select("id, body, sent_at")
-    .eq("account_id", session.accountId)
-    .eq("message_type", "departure_notice")
-    .gte("sent_at", sevenDaysAgo)
-    .order("sent_at", { ascending: false })
-    .limit(5);
+  // 自分が予約した便の出船通知（直近7日）
+  const sevenDaysAgoDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  let departureNotices: Array<{
+    trip_id: string;
+    departure_judgement: string;
+    cancel_reason: string | null;
+    checked_at: string;
+    trips: { trip_date: string; departure_time: string | null; target_species: string | null } | null;
+  }> = [];
+
+  if (customer) {
+    const { data: custReservations } = await supabase
+      .from("reservations")
+      .select("trip_id, trips!inner(trip_date)")
+      .eq("customer_id", customer.id)
+      .neq("status", "cancelled")
+      .gte("trips.trip_date", sevenDaysAgoDate);
+
+    const myTripIds = [
+      ...new Set(
+        (custReservations ?? []).map((r) => r.trip_id).filter((id): id is string => !!id)
+      ),
+    ];
+
+    if (myTripIds.length > 0) {
+      const { data: checks } = await supabase
+        .from("pre_departure_checks")
+        .select("trip_id, departure_judgement, cancel_reason, checked_at, trips(trip_date, departure_time, target_species)")
+        .in("trip_id", myTripIds)
+        .gte("checked_at", sevenDaysAgoDate + "T00:00:00Z")
+        .order("checked_at", { ascending: false })
+        .limit(5);
+      departureNotices = (checks ?? []) as typeof departureNotices;
+    }
+  }
 
   const featurePoints = account?.feature_points ?? true;
   const featureCoupon = account?.feature_coupon ?? true;
@@ -258,23 +283,33 @@ export default async function CustomerHomePage() {
         </section>
       )}
 
-      {/* 出船通知 */}
-      {(departureNotices ?? []).length > 0 && (
+      {/* 出船通知（自分の予約便のみ） */}
+      {departureNotices.length > 0 && (
         <section>
           <h2 className="text-sm font-bold text-gray-700 mb-2">出船通知</h2>
           <div className="space-y-2">
-            {(departureNotices ?? []).map((notice) => {
-              const isGo = notice.body?.includes("出船します");
+            {departureNotices.map((notice) => {
+              const isGo = notice.departure_judgement === "go";
+              const trip = notice.trips;
+              const dateStr = trip
+                ? `${trip.trip_date}${trip.departure_time ? " " + trip.departure_time.slice(0, 5) : ""}${trip.target_species ? " / " + trip.target_species : ""}`
+                : "";
               return (
-                <Card key={notice.id}>
+                <Card key={notice.trip_id}>
                   <div className="flex items-start gap-3">
                     <span className="text-xl shrink-0">{isGo ? "🚢" : "⚠️"}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-800 whitespace-pre-wrap break-all leading-relaxed">
-                        {notice.body}
+                      {dateStr && (
+                        <p className="text-xs font-semibold text-gray-700 mb-0.5">{dateStr}</p>
+                      )}
+                      <p className="text-sm text-gray-800 font-medium">
+                        {isGo ? "出船します" : "出船中止"}
                       </p>
+                      {notice.cancel_reason && (
+                        <p className="text-xs text-gray-500 mt-0.5">理由: {notice.cancel_reason}</p>
+                      )}
                       <p className="text-xs text-gray-400 mt-1">
-                        {new Date(notice.sent_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        {new Date(notice.checked_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </p>
                     </div>
                   </div>
