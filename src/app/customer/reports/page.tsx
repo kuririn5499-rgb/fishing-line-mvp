@@ -8,15 +8,7 @@ import { getSession } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
 import { MarkReportsAsRead } from "./MarkReportsAsRead";
-
-function formatSentAt(sentAt: string): string {
-  const d = new Date(sentAt);
-  const m = d.getMonth() + 1;
-  const day = d.getDate();
-  const h = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  return `${m}/${day} ${h}:${min}`;
-}
+import { ReportsCardList } from "./ReportsCardList";
 
 export default async function CustomerReportsPage() {
   const session = await getSession();
@@ -95,44 +87,10 @@ export default async function CustomerReportsPage() {
           </p>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {logs.map((log) => {
-            const images = logImages.get(log.id) ?? [];
-            return (
-              <Card key={log.id}>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">
-                      {log.message_type === "fishing_report" ? "🐟" : "📢"}
-                    </span>
-                    <span className="text-xs font-semibold text-gray-700">
-                      {log.message_type === "fishing_report" ? "釣果情報" : "お知らせ"}
-                    </span>
-                    <span className="text-xs text-gray-400 ml-auto">
-                      {formatSentAt(log.sent_at)}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                    {log.body}
-                  </p>
-                  {images.length > 0 && (
-                    <div className={`grid gap-2 mt-1 ${images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
-                      {images.map((url, i) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          key={i}
-                          src={url}
-                          alt={`釣果写真 ${i + 1}`}
-                          className="w-full rounded-xl object-cover max-h-56"
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+        <ReportsCardList
+          logs={logs}
+          logImages={Object.fromEntries(logImages)}
+        />
       )}
     </div>
   );
