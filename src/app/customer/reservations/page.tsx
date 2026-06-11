@@ -14,7 +14,7 @@ import { WaitlistButton } from "@/components/forms/WaitlistButton";
 import type { Reservation, Trip, Coupon } from "@/types";
 
 type ReservationWithTrip = Reservation & {
-  trips: Pick<Trip, "trip_date" | "departure_time" | "target_species" | "status" | "price_per_person"> | null;
+  trips: Pick<Trip, "trip_date" | "departure_time" | "target_species" | "fishing_method" | "location" | "status" | "price_per_person"> | null;
 };
 
 interface PageProps {
@@ -41,7 +41,7 @@ export default async function CustomerReservationsPage({ searchParams }: PagePro
   const { data: reservations } = customer
     ? await supabase
         .from("reservations")
-        .select("*, trips(trip_date, departure_time, target_species, status, price_per_person)")
+        .select("*, trips(trip_date, departure_time, target_species, fishing_method, location, status, price_per_person)")
         .eq("customer_id", customer.id)
         .neq("status", "cancelled")
         .order("created_at", { ascending: false })
@@ -51,7 +51,7 @@ export default async function CustomerReservationsPage({ searchParams }: PagePro
   // 受付中の便一覧（定員・予約数込み）
   const { data: openTripsRaw } = await supabase
     .from("trips")
-    .select("id, trip_date, departure_time, target_species, capacity, price_per_person, boats(name), reservations(passengers_count, status)")
+    .select("id, trip_date, departure_time, target_species, fishing_method, location, capacity, price_per_person, boats(name), reservations(passengers_count, status)")
     .eq("account_id", session.accountId)
     .gte("trip_date", today)
     .in("status", ["open"])
@@ -151,7 +151,8 @@ export default async function CustomerReservationsPage({ searchParams }: PagePro
                           {trip.departure_time ? ` ${trip.departure_time.slice(0, 5)}〜` : ""}
                         </p>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          {boatName} / {trip.target_species ?? "—"}
+                          {boatName}{(trip.fishing_method ?? trip.target_species) ? ` / ${trip.fishing_method ?? trip.target_species}` : ""}
+                          {trip.location ? ` / ${trip.location}` : ""}
                         </p>
                         {trip.price_per_person != null && (
                           <p className="text-xs text-gray-600 mt-0.5">
@@ -198,7 +199,8 @@ export default async function CustomerReservationsPage({ searchParams }: PagePro
                         {r.trips?.departure_time ? ` ${r.trips.departure_time.slice(0, 5)}〜` : ""}
                       </p>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {r.trips?.target_species ?? "—"}
+                        {r.trips?.fishing_method ?? r.trips?.target_species ?? "—"}
+                        {r.trips?.location ? ` / ${r.trips.location}` : ""}
                       </p>
                       {r.trips?.price_per_person != null && (() => {
                         const base = r.trips!.price_per_person!;

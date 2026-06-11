@@ -132,6 +132,8 @@ export interface Trip {
   return_time: string | null; // time
   trip_type: string | null;
   target_species: string | null;
+  fishing_method: string | null;
+  location: string | null;
   capacity: number | null;
   status: TripStatus;
   price_per_person: number | null;

@@ -111,7 +111,9 @@ export function ReservationForm({ trips, defaultTripId, couponMap }: Reservation
               const price = trip.price_per_person != null
                 ? ` ${formatPrice(trip.price_per_person)}/名`
                 : "";
-              const label = `${formatDateWithDay(trip.trip_date)} ${trip.departure_time?.slice(0, 5) ?? ""} ${trip.target_species ?? ""}${price}`;
+              const planStr = trip.fishing_method ?? trip.target_species ?? "";
+              const locStr = trip.location ? ` / ${trip.location}` : "";
+              const label = `${formatDateWithDay(trip.trip_date)} ${trip.departure_time?.slice(0, 5) ?? ""} ${planStr}${locStr}${price}`;
               return (
                 <option key={trip.id} value={trip.id}>
                   {label.trim()}

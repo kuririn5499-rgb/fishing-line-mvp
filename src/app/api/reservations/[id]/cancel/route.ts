@@ -10,6 +10,7 @@ import { createServerSupabaseClient } from "@/lib/supabase";
 import { sendPushMessage, buildCancellationNoticeMessage } from "@/lib/line-messaging";
 import { todayJST } from "@/lib/repositories/utils";
 import { processWaitlist } from "@/lib/waitlist";
+import { syncTripCalendarCounts } from "@/lib/calendar-sync";
 
 export async function POST(
   _req: NextRequest,
@@ -106,6 +107,11 @@ export async function POST(
     // キャンセル待ちを繰り上げる（失敗しても続行）
     await processWaitlist(trip.id).catch((e) =>
       console.error("[reservations/cancel] waitlist処理失敗:", e)
+    );
+
+    // カレンダー人数・満船状態を再同期（失敗しても続行）
+    await syncTripCalendarCounts(trip.id, supabase, session.accountId).catch((e) =>
+      console.error("[reservations/cancel] カレンダー同期失敗:", e)
     );
 
     return NextResponse.json({ ok: true });

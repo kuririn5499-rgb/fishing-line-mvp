@@ -19,9 +19,11 @@ interface Props {
     requesterName: string | null;
   };
   boats: { id: string; name: string }[];
+  methodTags?: string[];
+  locationTags?: string[];
 }
 
-export function TripRequestApproveForm({ request, boats }: Props) {
+export function TripRequestApproveForm({ request, boats, methodTags = [], locationTags = [] }: Props) {
   const [mode, setMode] = useState<"idle" | "approving">("idle");
   const [loading, setLoading] = useState(false);
   const { toast, show, hide } = useToast();
@@ -106,6 +108,34 @@ export function TripRequestApproveForm({ request, boats }: Props) {
                 {...register("target_species")}
                 placeholder="タイラバ、アジ釣りなど"
               />
+            </FormField>
+
+            <FormField label="プラン" error={errors.fishing_method}>
+              <input
+                list="approve-method-list"
+                {...register("fishing_method")}
+                placeholder="ジギング・タイラバなど"
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              />
+              {methodTags.length > 0 && (
+                <datalist id="approve-method-list">
+                  {methodTags.map((m) => <option key={m} value={m} />)}
+                </datalist>
+              )}
+            </FormField>
+
+            <FormField label="場所" error={errors.location}>
+              <input
+                list="approve-location-list"
+                {...register("location")}
+                placeholder="登録済みから選ぶか入力"
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              />
+              {locationTags.length > 0 && (
+                <datalist id="approve-location-list">
+                  {locationTags.map((l) => <option key={l} value={l} />)}
+                </datalist>
+              )}
             </FormField>
 
             {boats.length > 0 && (

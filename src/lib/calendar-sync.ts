@@ -25,10 +25,16 @@ export async function syncTripCalendarCounts(
       .maybeSingle(),
   ]);
 
-  if (!trip?.departure_time || !trip.return_time) return;
+  if (!trip?.departure_time || !trip.return_time) {
+    console.log("[calendar-sync] skip: departure_time or return_time missing", { tripId });
+    return;
+  }
 
   const creds = resolveCredentials(account);
-  if (!creds) return; // Google Calendar 未設定なら同期スキップ
+  if (!creds) {
+    console.log("[calendar-sync] skip: Google Calendar credentials not configured", { accountId });
+    return;
+  }
 
   // passengers_count を合計して実際の乗船人数を算出
   const { data: reservationsData } = await supabase
@@ -56,6 +62,9 @@ export async function syncTripCalendarCounts(
   };
 
   if (trip.gcal_event_id) {
+    console.log("[calendar-sync] updating event", { tripId, gcal_event_id: trip.gcal_event_id, reservedCount, capacity: trip.capacity });
     await updateTripEventCounts(trip.gcal_event_id, eventInput, creds);
+  } else {
+    console.log("[calendar-sync] skip: gcal_event_id not set", { tripId });
   }
 }

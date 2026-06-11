@@ -112,7 +112,8 @@ export default async function CaptainTripsPage() {
                       )}
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      {trip.boats?.name ?? "—"} / {trip.target_species ?? "—"} /
+                      {trip.boats?.name ?? "—"} / {trip.fishing_method ?? trip.target_species ?? "—"}
+                      {trip.location ? ` / ${trip.location}` : ""} /
                       定員 {trip.capacity ?? "—"}名
                       {trip.price_per_person != null && (
                         <span className="text-gray-700 font-medium ml-1">

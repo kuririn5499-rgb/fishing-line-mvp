@@ -11,17 +11,29 @@ import type { Role, SessionUser } from "@/types";
 const VALID_ROLES: Role[] = ["customer", "captain", "staff", "operator", "admin"];
 const DEV_USER_ID = "00000000-0000-0000-0000-000000000001";
 
+export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "開発環境専用です" }, { status: 403 });
+  }
+  const supabase = createServerSupabaseClient();
+  const { data: accounts } = await supabase
+    .from("accounts")
+    .select("slug, name, boat_name")
+    .order("created_at", { ascending: true });
+  return NextResponse.json({ accounts: accounts ?? [] });
+}
+
 export async function POST(req: Request) {
   if (process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "開発環境専用です" }, { status: 403 });
   }
 
-  const { role } = (await req.json()) as { role: Role };
+  const { role, slug: bodySlug } = (await req.json()) as { role: Role; slug?: string };
   if (!VALID_ROLES.includes(role)) {
     return NextResponse.json({ error: "無効な role です" }, { status: 400 });
   }
 
-  const slug = process.env.ACCOUNT_SLUG ?? "demo";
+  const slug = bodySlug || process.env.ACCOUNT_SLUG || "demo";
   const supabase = createServerSupabaseClient();
 
   const { data: account } = await supabase

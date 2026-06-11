@@ -19,7 +19,7 @@ export default async function CaptainTripRequestsPage() {
 
   const supabase = createServerSupabaseClient();
 
-  const [{ data: requests }, { data: boats }] = await Promise.all([
+  const [{ data: requests }, { data: boats }, { data: tagsRaw }] = await Promise.all([
     supabase
       .from("trip_requests")
       .select("*, users(display_name, picture_url)")
@@ -31,7 +31,15 @@ export default async function CaptainTripRequestsPage() {
       .select("id, name")
       .eq("account_id", session.accountId)
       .eq("is_active", true),
+    supabase
+      .from("fishing_tags")
+      .select("tag_type, name")
+      .eq("account_id", session.accountId)
+      .order("name", { ascending: true }),
   ]);
+
+  const methodTags = (tagsRaw ?? []).filter((t) => t.tag_type === "method").map((t) => t.name);
+  const locationTags = (tagsRaw ?? []).filter((t) => t.tag_type === "location").map((t) => t.name);
 
   const pending = (requests ?? []).filter((r) => r.status === "pending");
   const others  = (requests ?? []).filter((r) => r.status !== "pending");
@@ -75,6 +83,8 @@ export default async function CaptainTripRequestsPage() {
                   requesterName: user?.display_name ?? null,
                 }}
                 boats={boats ?? []}
+                methodTags={methodTags}
+                locationTags={locationTags}
               />
             ) : (
               <div className="text-sm space-y-0.5">

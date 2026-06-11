@@ -109,12 +109,32 @@ export default async function CustomerHomePage() {
     (r) => r.trip_id && !reservedRequestTripIds.has(r.trip_id as string)
   );
 
-  // 船名 + フィーチャーフラグ
-  const { data: account } = await supabase
-    .from("accounts")
-    .select("boat_name, name, feature_points, feature_coupon")
-    .eq("id", session.accountId)
-    .maybeSingle();
+  // 船名 + フィーチャーフラグ + 名簿未提出チェック + 未確認クーポン数（並列）
+  const [{ data: account }, submittedManifestsResult, { count: unclaimedCoupons }] = await Promise.all([
+    supabase
+      .from("accounts")
+      .select("boat_name, name, feature_points, feature_coupon")
+      .eq("id", session.accountId)
+      .maybeSingle(),
+    myReservations.length > 0 && customer
+      ? supabase
+          .from("boarding_manifests")
+          .select("reservation_id")
+          .in("reservation_id", myReservations.map((r) => r.id))
+      : Promise.resolve({ data: [] as Array<{ reservation_id: string | null }> }),
+    supabase
+      .from("user_coupons")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", session.userId)
+      .eq("status", "issued"),
+  ]);
+
+  const submittedManifestIds = new Set(
+    ((submittedManifestsResult.data ?? []) as Array<{ reservation_id: string | null }>)
+      .map((m) => m.reservation_id)
+      .filter((id): id is string => Boolean(id))
+  );
+  const missingManifestReservations = myReservations.filter((r) => !submittedManifestIds.has(r.id));
 
   // 自分が予約した便の出船通知（直近7日）
   const sevenDaysAgoDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -200,6 +220,59 @@ export default async function CustomerHomePage() {
         </section>
       )}
 
+      {/* やること */}
+      {(() => {
+        const hasMissing = missingManifestReservations.length > 0;
+        const hasCoupons = featureCoupon && (unclaimedCoupons ?? 0) > 0;
+        return (
+          <section>
+            <h2 className="text-sm font-bold text-gray-700 mb-2">📌 やること</h2>
+            {!hasMissing && !hasCoupons ? (
+              <div className="rounded-xl px-4 py-3 flex items-center gap-3 bg-green-50 border border-green-100">
+                <span className="text-lg">✅</span>
+                <p className="text-sm font-medium text-green-700">やることはありません</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {missingManifestReservations.map((r) => {
+                  const tripDate = r.trip!.trip_date;
+                  const prevDay = (() => { const d = new Date(tripDate + "T00:00:00"); d.setDate(d.getDate() - 1); return `${d.getMonth() + 1}/${d.getDate()}`; })();
+                  return (
+                    <Link key={`manifest-${r.id}`} href="/customer/manifest" className="block">
+                      <div className="rounded-xl px-4 py-3 flex items-center gap-3 bg-amber-50 border border-amber-200">
+                        <span className="text-xl shrink-0">📋</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-amber-800">
+                            {formatDateWithDay(tripDate)} 乗船名簿を記入
+                          </p>
+                          <p className="text-xs text-amber-600 mt-0.5">{prevDay}までに提出してください</p>
+                        </div>
+                        <span className="text-gray-300 text-lg shrink-0">›</span>
+                      </div>
+                    </Link>
+                  );
+                })}
+                {hasCoupons && (
+                  <Link href="/customer/coupons" className="block">
+                    <div className="rounded-xl px-4 py-3 flex items-center gap-3 bg-blue-50 border border-blue-200">
+                      <span className="text-xl shrink-0">🎟️</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-blue-800">クーポンが {unclaimedCoupons}件 届いています</p>
+                        <p className="text-xs text-blue-600 mt-0.5">確認してください</p>
+                      </div>
+                      <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-blue-500 px-1.5 text-xs font-bold text-white shrink-0">
+                        {(unclaimedCoupons ?? 0) > 99 ? "99+" : unclaimedCoupons}
+                      </span>
+                      <span className="text-gray-300 text-lg shrink-0">›</span>
+                    </div>
+                  </Link>
+                )}
+              </div>
+            )}
+          </section>
+        );
+      })()}
+
       {/* クイックアクション */}
       <div className="grid grid-cols-2 gap-3">
         {[
@@ -239,6 +312,12 @@ export default async function CustomerHomePage() {
             </Card>
           </Link>
         )}
+        <Link href="/customer/manual" className="col-span-2">
+          <Card className="flex items-center justify-center gap-3 hover:shadow-md transition-shadow">
+            <span className="text-2xl">📖</span>
+            <span className="text-sm font-medium text-gray-700">使い方マニュアル</span>
+          </Card>
+        </Link>
       </div>
 
       {/* 予約中の便 */}

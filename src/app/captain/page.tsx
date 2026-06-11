@@ -8,7 +8,7 @@ import { getSession } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { TripStatusBadge } from "@/components/ui/StatusBadge";
-import { todayJST } from "@/lib/repositories/utils";
+import { todayJST, formatDateWithDay } from "@/lib/repositories/utils";
 import { ManualReservationForm } from "@/components/forms/ManualReservationForm";
 import { InstallBanner } from "@/components/captain/InstallBanner";
 
@@ -20,9 +20,14 @@ export default async function CaptainDashboardPage() {
   const today = todayJST();
   const until = new Date();
   until.setDate(until.getDate() + 30);
+  const sevenDaysLaterStr = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  })();
 
-  // アカウント情報 + 本日の便 + 手動予約フォーム用の便 + ポイント申請 pending + リクエスト pending を並列取得
-  const [{ data: accountInfo }, { data: todayTrips }, { data: upcomingTrips }, { count: pendingRedemptions }, { count: pendingRequests }] = await Promise.all([
+  // アカウント情報 + 本日の便 + 手動予約フォーム用の便 + ポイント申請 pending + リクエスト pending + 直近7日の便（やること用）を並列取得
+  const [{ data: accountInfo }, { data: todayTrips }, { data: upcomingTrips }, { count: pendingRedemptions }, { count: pendingRequests }, { data: upcomingAlertTripsRaw }] = await Promise.all([
     supabase
       .from("accounts")
       .select("name, boat_name, last_read_reservations_at")
@@ -53,6 +58,14 @@ export default async function CaptainDashboardPage() {
       .select("id", { count: "exact", head: true })
       .eq("account_id", session.accountId)
       .eq("status", "pending"),
+    supabase
+      .from("trips")
+      .select("id, trip_date, departure_time, target_species, boats(name), reservations(id, status)")
+      .eq("account_id", session.accountId)
+      .gt("trip_date", today)
+      .lte("trip_date", sevenDaysLaterStr)
+      .not("status", "in", '("cancelled","completed")')
+      .order("trip_date", { ascending: true }),
   ]);
 
   const trips = todayTrips ?? [];
@@ -68,6 +81,19 @@ export default async function CaptainDashboardPage() {
       boat_name: boatName,
     };
   });
+
+  // 直近7日の便のうち予約がある便（やること用）
+  type UpcomingAlertTrip = {
+    id: string;
+    trip_date: string;
+    departure_time: string | null;
+    target_species: string | null;
+    boats: { name: string } | { name: string }[] | null;
+    reservations: { id: string; status: string }[] | null;
+  };
+  const upcomingTripTodos = ((upcomingAlertTripsRaw ?? []) as UpcomingAlertTrip[]).filter(
+    (trip) => ((trip.reservations ?? []) as { id: string; status: string }[]).some((r) => r.status !== "cancelled")
+  );
 
   // アラート集計（中止・完了便は除外）
   const activeTrips = trips.filter(
@@ -130,6 +156,68 @@ export default async function CaptainDashboardPage() {
           </p>
         )}
       </div>
+
+      {/* やること */}
+      {(() => {
+        const todos: Array<{
+          key: string;
+          href: string;
+          icon: string;
+          label: string;
+          sub: string;
+          count?: number;
+          urgent: boolean;
+        }> = [];
+        if ((unreadReservations ?? 0) > 0)
+          todos.push({ key: "res", href: "/captain/reservations", icon: "📋", label: `新しい予約が ${unreadReservations}件`, sub: "確認・承認してください", count: unreadReservations as number, urgent: true });
+        if ((pendingRequests ?? 0) > 0)
+          todos.push({ key: "req", href: "/captain/trip-requests", icon: "🙋", label: `便リクエストが ${pendingRequests}件`, sub: "承認・却下してください", count: pendingRequests as number, urgent: true });
+        if ((pendingRedemptions ?? 0) > 0)
+          todos.push({ key: "rdm", href: "/captain/points", icon: "⭐", label: `ポイント申請が ${pendingRedemptions}件`, sub: "確認してください", count: pendingRedemptions as number, urgent: true });
+        for (const trip of upcomingTripTodos) {
+          const boatName = Array.isArray(trip.boats) ? trip.boats[0]?.name : (trip.boats as { name: string } | null)?.name;
+          const prevDay = (() => { const d = new Date(trip.trip_date + "T00:00:00"); d.setDate(d.getDate() - 1); return `${d.getMonth() + 1}/${d.getDate()}`; })();
+          todos.push({
+            key: `trip-${trip.id}`,
+            href: `/captain/manifests`,
+            icon: "⚓",
+            label: `${formatDateWithDay(trip.trip_date)} 名簿確認・出船情報`,
+            sub: `${boatName ? boatName + " / " : ""}${trip.target_species ?? ""} — ${prevDay}までに完了`,
+            urgent: false,
+          });
+        }
+        return (
+          <section>
+            <h2 className="text-sm font-bold text-gray-700 mb-2">📌 やること</h2>
+            {todos.length === 0 ? (
+              <div className="rounded-xl px-4 py-3 flex items-center gap-3 bg-green-50 border border-green-100">
+                <span className="text-lg">✅</span>
+                <p className="text-sm font-medium text-green-700">やることはありません</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {todos.map((todo) => (
+                  <Link key={todo.key} href={todo.href} className="block">
+                    <div className={`rounded-xl px-4 py-3 flex items-center gap-3 border transition-colors ${todo.urgent ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"}`}>
+                      <span className="text-xl shrink-0">{todo.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-semibold ${todo.urgent ? "text-red-800" : "text-amber-800"}`}>{todo.label}</p>
+                        <p className={`text-xs mt-0.5 ${todo.urgent ? "text-red-600" : "text-amber-600"}`}>{todo.sub}</p>
+                      </div>
+                      {todo.count != null && (
+                        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white shrink-0">
+                          {todo.count > 99 ? "99+" : todo.count}
+                        </span>
+                      )}
+                      <span className="text-gray-300 text-lg shrink-0">›</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      })()}
 
       {/* サマリーカード */}
       <div className="grid grid-cols-3 gap-3">
@@ -307,6 +395,12 @@ export default async function CaptainDashboardPage() {
           <Card className="flex items-center gap-3 hover:shadow-md transition-shadow">
             <span className="text-2xl">🏷️</span>
             <span className="text-sm font-medium">タグ管理</span>
+          </Card>
+        </Link>
+        <Link href="/captain/manual">
+          <Card className="flex items-center gap-3 hover:shadow-md transition-shadow col-span-2">
+            <span className="text-2xl">📖</span>
+            <span className="text-sm font-medium">使い方マニュアル</span>
           </Card>
         </Link>
       </div>

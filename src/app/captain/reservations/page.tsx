@@ -32,7 +32,7 @@ export default async function CaptainReservationsPage() {
 
   const { data: trips } = await supabase
     .from("trips")
-    .select("id, trip_date, departure_time, target_species, boats(name)")
+    .select("id, trip_date, departure_time, target_species, fishing_method, location, boats(name)")
     .eq("account_id", session.accountId)
     .gte("trip_date", today)
     .lte("trip_date", until.toISOString().slice(0, 10))
@@ -62,7 +62,7 @@ export default async function CaptainReservationsPage() {
       coupon_id,
       discount_amount,
       created_at,
-      trips(id, trip_date, departure_time, target_species, price_per_person, boats(name)),
+      trips(id, trip_date, departure_time, target_species, fishing_method, location, price_per_person, boats(name)),
       customers(full_name, phone)
     `)
     .eq("account_id", session.accountId)
@@ -75,6 +75,8 @@ export default async function CaptainReservationsPage() {
     trip_date: string;
     departure_time: string | null;
     target_species: string | null;
+    fishing_method: string | null;
+    location: string | null;
     price_per_person: number | null;
     boats?: { name: string }[] | { name: string } | null;
   };
@@ -152,7 +154,9 @@ export default async function CaptainReservationsPage() {
                       {trip.departure_time ? ` ${trip.departure_time.slice(0, 5)}〜` : ""}
                     </span>
                     <span className="text-xs text-gray-400">
-                      {boatName ?? ""}{trip.target_species ? ` / ${trip.target_species}` : ""}
+                      {boatName ?? ""}
+                      {(trip.fishing_method ?? trip.target_species) ? ` / ${trip.fishing_method ?? trip.target_species}` : ""}
+                      {trip.location ? ` / ${trip.location}` : ""}
                     </span>
                     <span className="text-xs text-gray-400 ml-auto">
                       {rList.length}件

@@ -64,10 +64,15 @@ function formatDateShort(date: string): string {
 function buildSummary(input: TripEventInput & { reservedCount?: number }): string {
   const dateStr = formatDateShort(input.tripDate);
   const plan = input.fishingMethod ?? input.targetSpecies ?? "出船";
-  const locStr = input.location ? ` ${input.location}` : "";
   const time = `${input.departureTime}〜${input.returnTime}`;
   const reserved = input.reservedCount ?? 0;
   const available = input.capacity != null ? input.capacity - reserved : null;
+
+  if (available !== null && available <= 0) {
+    return `${dateStr} ${plan} ${time} 満船になりました！ありがとうございます！`;
+  }
+
+  const locStr = input.location ? ` ${input.location}` : "";
   const countStr = available != null ? ` 予約${reserved}名 募集中${available}名` : ` 予約${reserved}名`;
   return `${dateStr} ${plan}${locStr} ${time}${countStr}`;
 }
@@ -96,11 +101,28 @@ export async function updateTripEventCounts(
   creds: GoogleCalendarCredentials
 ): Promise<void> {
   const calendar = getCalendarClient(creds);
+  const isFull = input.capacity != null && input.reservedCount >= input.capacity;
+  const summary = buildSummary(input);
+
+  // 満船時は赤(Tomato=11)、解除時は summary のみ更新してから別 PATCH で色をリセット
   await calendar.events.patch({
     calendarId: creds.calendarId,
     eventId,
-    requestBody: { summary: buildSummary(input) },
+    requestBody: {
+      summary,
+      ...(isFull ? { colorId: "11" } : {}),
+    },
   });
+
+  // 満船解除の場合、colorId フィールドを null で上書きしてデフォルト色に戻す
+  if (!isFull) {
+    await calendar.events.patch({
+      calendarId: creds.calendarId,
+      eventId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      requestBody: { colorId: null as any },
+    });
+  }
 }
 
 export async function updateTripEventDetails(

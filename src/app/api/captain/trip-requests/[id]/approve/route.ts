@@ -40,7 +40,7 @@ export async function POST(
       return NextResponse.json({ error: "リクエストが見つかりません" }, { status: 404 });
     }
 
-    const { departure_time, return_time, capacity, price_per_person, boat_id, target_species } = parsed.data;
+    const { departure_time, return_time, capacity, price_per_person, boat_id, target_species, fishing_method, location } = parsed.data;
 
     // 便を作成
     const { data: trip, error: tripErr } = await supabase
@@ -52,6 +52,8 @@ export async function POST(
         departure_time: departure_time || null,
         return_time: return_time || null,
         target_species: target_species || request.target_species || null,
+        fishing_method: fishing_method || null,
+        location: location || null,
         capacity: capacity ?? null,
         price_per_person: price_per_person ?? null,
         status: "open",

@@ -248,6 +248,8 @@ export type TripRequestCreate = z.infer<typeof TripRequestCreateSchema>;
 export const TripRequestApproveSchema = z.object({
   boat_id: z.string().uuid().optional(),
   target_species: z.string().max(200).optional(),
+  fishing_method: z.string().max(100).optional(),
+  location: z.string().max(100).optional(),
   departure_time: z.string().regex(/^\d{2}:\d{2}$/, "HH:MM 形式で入力してください").optional().or(z.literal("")),
   return_time: z.string().regex(/^\d{2}:\d{2}$/, "HH:MM 形式で入力してください").optional().or(z.literal("")),
   capacity: z.coerce.number().int().min(1).max(100).optional(),
